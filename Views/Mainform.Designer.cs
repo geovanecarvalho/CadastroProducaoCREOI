@@ -31,6 +31,7 @@
             this.btnSalvarConfig = new System.Windows.Forms.Button();
             this.btnLimparConfig = new System.Windows.Forms.Button();
             
+            
             this.grpExcel = new System.Windows.Forms.GroupBox();
             this.lblArquivo = new System.Windows.Forms.Label();
             this.btnSelecionarArquivo = new System.Windows.Forms.Button();
@@ -54,8 +55,21 @@
             // pnlHeader
             this.pnlHeader.BackColor = System.Drawing.Color.FromArgb(52, 73, 94);
             this.pnlHeader.Location = new System.Drawing.Point(0, 0);
-            this.pnlHeader.Size = new System.Drawing.Size(950, 145);
+            this.pnlHeader.Size = new System.Drawing.Size(970, 140); // Ajuste a altura se necessário
             this.pnlHeader.TabIndex = 0;
+
+            // Botão Suporte Técnico
+            this.btnSuporte = new System.Windows.Forms.Button();
+            this.btnSuporte.Text = "🛠️ Suporte";
+            this.btnSuporte.Location = new System.Drawing.Point(830, 0); // Posição no canto direito
+            this.btnSuporte.Size = new System.Drawing.Size(130, 35);
+            this.btnSuporte.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnSuporte.BackColor = System.Drawing.Color.FromArgb(231, 76, 60); // Vermelho
+            this.btnSuporte.ForeColor = System.Drawing.Color.White;
+            this.btnSuporte.Font = new System.Drawing.Font("Segoe UI", 10, System.Drawing.FontStyle.Bold);
+            this.btnSuporte.FlatAppearance.BorderSize = 0;
+            this.btnSuporte.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnSuporte.Click += new System.EventHandler(this.BtnSuporte_Click);
             
             // picLogo
             try
@@ -89,7 +103,7 @@
             
             // Adicionar controles ao cabeçalho
             this.pnlHeader.Controls.AddRange(new System.Windows.Forms.Control[] {
-                this.picLogo, this.lblTitulo, this.lblSubtitulo
+                this.picLogo, this.lblTitulo, this.lblSubtitulo, this.btnSuporte
             });
             
             // ========== MAINFORM ==========
@@ -317,7 +331,7 @@
         private System.Windows.Forms.PictureBox picLogo;
         private System.Windows.Forms.Label lblTitulo;
         private System.Windows.Forms.Label lblSubtitulo;
-        
+        private System.Windows.Forms.Button btnSuporte;
         private System.Windows.Forms.GroupBox grpConfig;
         private System.Windows.Forms.Label lblUsuario;
         private System.Windows.Forms.TextBox txtUsuario;

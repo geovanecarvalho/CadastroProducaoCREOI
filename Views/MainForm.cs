@@ -606,5 +606,26 @@ namespace CadastroProducaoCRE.Views
             
             FinalizarExecucao(sucesso);
         }
+
+        private void BtnSuporte_Click(object? sender, EventArgs e)
+        {
+            string mensagem = 
+                "🛠️ SUPORTE TÉCNICO\n\n" +
+                "📧 E-mail: geovanehacker.io@gmail.com\n\n" +
+                "📋 PARA ENVIAR O SUPORTE:\n" +
+                "• Clique em 'Baixar Log' para salvar o arquivo de log\n" +
+                "• Tire um print da tela do erro (Print Screen)\n" +
+                "• Envie um e-mail para o endereço acima anexando o log e o print\n" +
+                "• Descreva o problema no e-mail\n\n" +
+                "ℹ️ Informações do sistema serão incluídas automaticamente no log.\n\n" +
+                "Clique em OK para copiar o e-mail automaticamente.";
+            
+            if (MessageBox.Show(mensagem, "Suporte Técnico", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) == DialogResult.OK)
+            {
+                Clipboard.SetText("geovanehacker.io@gmail.com");
+                MessageBox.Show("✅ E-mail copiado para a área de transferência!", "Copiado", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
     }
 }
