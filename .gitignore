@@ -1,0 +1,75 @@
+# Binários e objetos compilados
+bin/
+obj/
+*.exe
+*.dll
+*.pdb
+*.deps.json
+*.runtimeconfig.json
+*.cache
+
+# Arquivos de usuário do Visual Studio
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.csproj.user
+
+# Pastas de publicação
+publish/
+*.nupkg
+
+# Arquivos de log
+*.log
+*.txt.log
+
+# Arquivos temporários
+*.tmp
+*.temp
+*.cache
+Thumbs.db
+Desktop.ini
+
+# Arquivos de backup
+*.bak
+*.backup
+*~
+
+# Arquivos de configuração de IDE
+.vs/
+.vscode/
+.idea/
+
+# Arquivos específicos do .NET
+*.ncrunchsolution
+*.crunchproject
+*.crunchproject.user
+*.crunchlocal
+
+# Pastas de relatórios de teste
+TestResults/
+Coverage/
+
+# Arquivos de dependências
+packages/
+*.nuget.props
+*.nuget.targets
+
+# Pastas de documentação gerada
+docs/_build/
+docs/_site/
+
+# Arquivos de ambiente
+.env
+.env.local
+appsettings.Development.json
+appsettings.Production.json
+
+# Playwright
+.playwright/
+*.playwright
+
+# Executáveis publicados (se houver)
+*.exe
+*.msi
+*.setup
