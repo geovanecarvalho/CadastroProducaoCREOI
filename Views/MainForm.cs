@@ -6,12 +6,24 @@ namespace CadastroProducaoCRE.Views
     public partial class MainForm : Form
     {
         private string _caminhoArquivo = "";
+        private ToolTip _toolTip;
         
         public MainForm()
         {
             InitializeComponent();
             LimparValidacaoCampos();
             AdicionarLog("✅ Aplicação iniciada");
+            
+            // Configurar ToolTip
+            _toolTip = new ToolTip();
+            _toolTip.InitialDelay = 100;
+            _toolTip.ReshowDelay = 50;
+            _toolTip.AutoPopDelay = 10000;
+            _toolTip.ShowAlways = true;
+            
+            _toolTip.SetToolTip(btnIniciar, "⚠️ Aguardando dados para iniciar...");
+            
+            VerificarProntoParaIniciar();
         }
         
         public void AdicionarLog(string mensagem)
@@ -53,6 +65,147 @@ namespace CadastroProducaoCRE.Views
             progressBar.Value = 0;
         }
         
+        // ========== MÉTODOS PARA CONTROLAR ESTADO DOS BOTÕES ==========
+        
+        private void SetBotoesHabilitados(bool habilitado)
+        {
+            // Botões de configuração
+            btnSalvarConfig.Enabled = habilitado;
+            btnLimparConfig.Enabled = habilitado;
+            
+            // Botões de arquivo
+            btnSelecionarArquivo.Enabled = habilitado;
+            btnLimparArquivo.Enabled = habilitado && !string.IsNullOrEmpty(_caminhoArquivo);
+            
+            // Botões de log
+            btnLimparLog.Enabled = habilitado;
+            btnExportarLog.Enabled = habilitado;
+            
+            // Botão mostrar senha
+            btnMostrarSenha.Enabled = habilitado;
+            
+            // CAMPOS DE TEXTO - Bloquear durante processamento
+            txtUsuario.Enabled = habilitado;
+            txtSenha.Enabled = habilitado;
+            
+            // Checkbox
+            chkHeadless.Enabled = habilitado;
+            
+            // Botão iniciar (oposto ao estado de processamento)
+            btnIniciar.Enabled = habilitado;
+            
+            // Botão parar (ativo apenas durante processamento)
+            btnParar.Enabled = !habilitado;
+            
+            // Ajustar cores
+            Color corDesabilitado = System.Drawing.Color.FromArgb(200, 200, 200);
+            Color corTextoDesabilitado = System.Drawing.Color.DimGray;
+            Color corHabilitado = System.Drawing.Color.LightBlue;
+            Color corTextoHabilitado = System.Drawing.Color.Black;
+            
+            if (!habilitado) // Durante processamento
+            {
+                // Botões de configuração
+                btnSalvarConfig.BackColor = corDesabilitado;
+                btnLimparConfig.BackColor = corDesabilitado;
+                btnSalvarConfig.ForeColor = corTextoDesabilitado;
+                btnLimparConfig.ForeColor = corTextoDesabilitado;
+                
+                // Botões de arquivo
+                btnSelecionarArquivo.BackColor = corDesabilitado;
+                btnLimparArquivo.BackColor = corDesabilitado;
+                btnSelecionarArquivo.ForeColor = corTextoDesabilitado;
+                btnLimparArquivo.ForeColor = corTextoDesabilitado;
+                
+                // Botões de log
+                btnLimparLog.BackColor = corDesabilitado;
+                btnExportarLog.BackColor = corDesabilitado;
+                btnLimparLog.ForeColor = corTextoDesabilitado;
+                btnExportarLog.ForeColor = corTextoDesabilitado;
+                
+                // Botão mostrar senha
+                btnMostrarSenha.BackColor = corDesabilitado;
+                btnMostrarSenha.ForeColor = corTextoDesabilitado;
+                
+                // Botão iniciar
+                btnIniciar.BackColor = corDesabilitado;
+                btnIniciar.ForeColor = corTextoDesabilitado;
+                
+                // Botão parar (ativo, cor vermelha)
+                btnParar.BackColor = System.Drawing.Color.LightCoral;
+                btnParar.ForeColor = System.Drawing.Color.Black;
+                btnParar.Text = "⏹ PARAR";
+                
+                // Campos de texto - opacos
+                txtUsuario.BackColor = corDesabilitado;
+                txtSenha.BackColor = corDesabilitado;
+                txtUsuario.ForeColor = corTextoDesabilitado;
+                txtSenha.ForeColor = corTextoDesabilitado;
+                
+                // Checkbox
+                chkHeadless.BackColor = corDesabilitado;
+                chkHeadless.ForeColor = corTextoDesabilitado;
+            }
+            else // Em espera
+            {
+                // Botões de configuração
+                btnSalvarConfig.BackColor = corHabilitado;
+                btnLimparConfig.BackColor = corHabilitado;
+                btnSalvarConfig.ForeColor = corTextoHabilitado;
+                btnLimparConfig.ForeColor = corTextoHabilitado;
+                
+                // Botões de arquivo
+                btnSelecionarArquivo.BackColor = corHabilitado;
+                btnLimparArquivo.BackColor = corHabilitado;
+                btnSelecionarArquivo.ForeColor = corTextoHabilitado;
+                btnLimparArquivo.ForeColor = corTextoHabilitado;
+                
+                // Botões de log
+                btnLimparLog.BackColor = corHabilitado;
+                btnExportarLog.BackColor = corHabilitado;
+                btnLimparLog.ForeColor = corTextoHabilitado;
+                btnExportarLog.ForeColor = corTextoHabilitado;
+                
+                // Botão mostrar senha - restaurar cor
+                btnMostrarSenha.BackColor = corHabilitado;
+                btnMostrarSenha.ForeColor = corTextoHabilitado;
+                
+                // Botão parar (desabilitado, cor opaca)
+                btnParar.BackColor = System.Drawing.Color.FromArgb(200, 150, 150); // Vermelho opaco
+                btnParar.ForeColor = System.Drawing.Color.DimGray;
+                btnParar.Text = "⏹ PARAR";
+                
+                // Restaurar campos de texto
+                txtUsuario.BackColor = System.Drawing.Color.White;
+                txtSenha.BackColor = System.Drawing.Color.White;
+                
+                if (txtUsuario.Text == "Digite sua matrícula")
+                {
+                    txtUsuario.ForeColor = System.Drawing.Color.Gray;
+                }
+                else
+                {
+                    txtUsuario.ForeColor = System.Drawing.Color.Black;
+                }
+                
+                if (txtSenha.Text == "Digite sua senha")
+                {
+                    txtSenha.ForeColor = System.Drawing.Color.Gray;
+                }
+                else
+                {
+                    txtSenha.ForeColor = System.Drawing.Color.Black;
+                }
+                
+                // Restaurar checkbox
+                chkHeadless.BackColor = System.Drawing.Color.Transparent;
+                chkHeadless.ForeColor = System.Drawing.Color.Black;
+                
+                // O botão iniciar terá sua cor definida pelo VerificarProntoParaIniciar
+                VerificarProntoParaIniciar();
+            }
+        }
+        
         // ========== VALIDAÇÃO DE CAMPOS ==========
         
         private void LimparValidacaoCampos()
@@ -71,7 +224,6 @@ namespace CadastroProducaoCRE.Views
         
         private void ValidarCampoObrigatorio(TextBox textBox, string placeholder)
         {
-            // Se o texto for o placeholder, considerar como vazio
             if (textBox.Text == placeholder)
             {
                 textBox.BackColor = System.Drawing.Color.LightCoral;
@@ -115,6 +267,7 @@ namespace CadastroProducaoCRE.Views
             {
                 ValidarCampoObrigatorio(txtUsuario, "Digite sua matrícula");
             }
+            VerificarProntoParaIniciar();
         }
         
         private void TxtUsuario_TextChanged(object? sender, EventArgs e)
@@ -152,6 +305,7 @@ namespace CadastroProducaoCRE.Views
             {
                 ValidarCampoObrigatorio(txtSenha, "Digite sua senha");
             }
+            VerificarProntoParaIniciar();
         }
         
         private void TxtSenha_TextChanged(object? sender, EventArgs e)
@@ -162,7 +316,8 @@ namespace CadastroProducaoCRE.Views
             }
             VerificarProntoParaIniciar();
         }
-        
+
+
         // ========== BOTÕES ==========
         
         private void BtnMostrarSenha_Click(object? sender, EventArgs e)
@@ -181,7 +336,6 @@ namespace CadastroProducaoCRE.Views
         
         private void BtnSalvarConfig_Click(object? sender, EventArgs e)
         {
-            // Validar campos antes de salvar
             if (txtUsuario.Text == "Digite sua matrícula" || string.IsNullOrWhiteSpace(txtUsuario.Text))
             {
                 AdicionarLog("❌ Não foi possível salvar: Matrícula é obrigatória!");
@@ -207,6 +361,12 @@ namespace CadastroProducaoCRE.Views
         {
             LimparValidacaoCampos();
             chkHeadless.Checked = false;
+            
+            // Após limpar, desabilitar o próprio botão
+            btnLimparConfig.Enabled = false;
+            btnLimparConfig.BackColor = System.Drawing.Color.FromArgb(200, 200, 200);
+            btnLimparConfig.ForeColor = System.Drawing.Color.DimGray;
+            
             txtUsuario.Focus();
             AdicionarLog("🗑️ Configurações limpas");
             VerificarProntoParaIniciar();
@@ -261,15 +421,49 @@ namespace CadastroProducaoCRE.Views
             }
             
             AdicionarLog("🚀 Iniciando automação...");
-            btnIniciar.Enabled = false;
-            btnParar.Enabled = true;
+            
+            // Mudar texto do botão iniciar
+            btnIniciar.Text = "⏳ PROCESSANDO...";
+            
+            // Desabilitar botões e campos durante o processamento
+            SetBotoesHabilitados(false);
+            
             ResetarProgresso();
+            
+            // TODO: Chamar o controller para iniciar a automação
         }
-        
+                
         private void BtnParar_Click(object? sender, EventArgs e)
         {
+            // Mudar texto e cor do botão parar durante o cancelamento
+            btnParar.Text = "⏸ PARANDO...";
+            btnParar.BackColor = System.Drawing.Color.Orange;
+            btnParar.ForeColor = System.Drawing.Color.Black;
+            btnParar.Enabled = false; // Desabilitar temporariamente para evitar múltiplos cliques
+            
             AdicionarLog("⚠️ Parando automação...");
-            btnParar.Enabled = false;
+            
+            // TODO: Chamar o controller para cancelar a automação
+            
+            // Simular um pequeno delay para o usuário ver a mudança
+            System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
+            timer.Interval = 500;
+            timer.Tick += (s, args) =>
+            {
+                timer.Stop();
+                
+                // Reabilitar botões e campos
+                SetBotoesHabilitados(true);
+                
+                // Restaurar texto do botão iniciar
+                btnIniciar.Text = "▶ INICIAR";
+                
+                AdicionarLog("✅ Automação interrompida pelo usuário");
+                
+                // Liberar o timer
+                timer.Dispose();
+            };
+            timer.Start();
         }
         
         private void BtnLimparLog_Click(object? sender, EventArgs e)
@@ -298,23 +492,98 @@ namespace CadastroProducaoCRE.Views
         
         private void VerificarProntoParaIniciar()
         {
+            // Verificar se o arquivo foi selecionado e existe
             bool temArquivo = !string.IsNullOrEmpty(_caminhoArquivo) && System.IO.File.Exists(_caminhoArquivo);
             
-            // Verificar usuário (ignorando placeholder)
+            // Verificar matrícula (ignorando placeholder)
             bool temUsuario = !string.IsNullOrWhiteSpace(txtUsuario.Text) && 
-                              txtUsuario.Text != "Digite sua matrícula";
+                            txtUsuario.Text != "Digite sua matrícula";
             
             // Verificar senha (ignorando placeholder)
             bool temSenha = !string.IsNullOrWhiteSpace(txtSenha.Text) && 
                             txtSenha.Text != "Digite sua senha";
             
-            btnIniciar.Enabled = temArquivo && temUsuario && temSenha;
+            // Verificar se os campos estão vazios (com placeholders)
+            bool camposVazios = (txtUsuario.Text == "Digite sua matrícula" || string.IsNullOrWhiteSpace(txtUsuario.Text)) &&
+                                (txtSenha.Text == "Digite sua senha" || string.IsNullOrWhiteSpace(txtSenha.Text));
+            
+            bool pronto = temArquivo && temUsuario && temSenha;
+            
+            btnIniciar.Enabled = pronto;
+            
+            // Botão Limpar Configurações - desabilitado se os campos já estão vazios
+            btnLimparConfig.Enabled = !camposVazios;
+            
+            // Ajustar cor do btnLimparConfig baseado no estado
+            if (btnLimparConfig.Enabled)
+            {
+                btnLimparConfig.BackColor = System.Drawing.Color.LightBlue;
+                btnLimparConfig.ForeColor = System.Drawing.Color.Black;
+            }
+            else
+            {
+                btnLimparConfig.BackColor = System.Drawing.Color.FromArgb(200, 200, 200);
+                btnLimparConfig.ForeColor = System.Drawing.Color.DimGray;
+            }
+            
+            // Atualizar cor do btnLimparArquivo baseado se há arquivo
+            btnLimparArquivo.Enabled = temArquivo;
+            if (temArquivo)
+            {
+                btnLimparArquivo.BackColor = System.Drawing.Color.LightBlue;
+                btnLimparArquivo.ForeColor = System.Drawing.Color.Black;
+            }
+            else
+            {
+                btnLimparArquivo.BackColor = System.Drawing.Color.FromArgb(200, 200, 200);
+                btnLimparArquivo.ForeColor = System.Drawing.Color.DimGray;
+            }
+            
+            if (pronto)
+            {
+                btnIniciar.Text = "▶ INICIAR";
+                btnIniciar.BackColor = System.Drawing.Color.LightGreen;
+                btnIniciar.ForeColor = System.Drawing.Color.Black;
+                _toolTip.SetToolTip(btnIniciar, "▶ Clique para iniciar a automação");
+            }
+            else
+            {
+                btnIniciar.BackColor = System.Drawing.Color.FromArgb(200, 200, 200);
+                btnIniciar.ForeColor = System.Drawing.Color.DimGray;
+                
+                bool faltaCredenciais = !temUsuario || !temSenha;
+                bool faltaArquivo = !temArquivo;
+                
+                if (faltaCredenciais && faltaArquivo)
+                {
+                    btnIniciar.Text = "⚠️ AGUARDANDO ARQUIVO E CREDENCIAIS";
+                    _toolTip.SetToolTip(btnIniciar, "⚠️ Selecione um arquivo Excel e preencha matrícula e senha");
+                }
+                else if (faltaArquivo)
+                {
+                    btnIniciar.Text = "⚠️ AGUARDANDO ARQUIVO EXCEL";
+                    _toolTip.SetToolTip(btnIniciar, "⚠️ Clique em 'Selecionar Arquivo Excel' para escolher uma planilha");
+                }
+                else if (faltaCredenciais)
+                {
+                    btnIniciar.Text = "⚠️ AGUARDANDO CREDENCIAIS";
+                    _toolTip.SetToolTip(btnIniciar, "⚠️ Preencha sua matrícula e senha nos campos acima");
+                }
+                else
+                {
+                    btnIniciar.Text = "▶ INICIAR";
+                    _toolTip.SetToolTip(btnIniciar, "⚠️ Verifique os campos obrigatórios");
+                }
+            }
         }
         
         private void FinalizarExecucao(bool sucesso)
         {
-            btnIniciar.Enabled = true;
-            btnParar.Enabled = false;
+            // Reabilitar botões e campos
+            SetBotoesHabilitados(true);
+            
+            // Restaurar texto do botão iniciar
+            btnIniciar.Text = "▶ INICIAR";
             
             if (sucesso)
             {
@@ -324,6 +593,7 @@ namespace CadastroProducaoCRE.Views
             {
                 AdicionarLog("❌ Execução finalizada com erros!");
             }
+            VerificarProntoParaIniciar();
         }
         
         public void OnAutomacaoConcluida(bool sucesso)

@@ -179,14 +179,17 @@
             this.btnSalvarConfig.Location = new System.Drawing.Point(560, 30);
             this.btnSalvarConfig.Size = new System.Drawing.Size(160, 35);
             this.btnSalvarConfig.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnSalvarConfig.BackColor = System.Drawing.Color.LightGray;
+            this.btnSalvarConfig.BackColor = System.Drawing.Color.LightBlue;
             this.btnSalvarConfig.Click += new System.EventHandler(this.BtnSalvarConfig_Click);
             
             this.btnLimparConfig.Text = "🗑️ Limpar Configurações";
             this.btnLimparConfig.Location = new System.Drawing.Point(730, 30);
             this.btnLimparConfig.Size = new System.Drawing.Size(160, 35);
             this.btnLimparConfig.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnLimparConfig.BackColor = System.Drawing.Color.LightGray;
+            this.btnLimparConfig.BackColor = System.Drawing.Color.LightBlue;
+            this.btnLimparConfig.ForeColor = System.Drawing.Color.Black;
+            this.btnLimparConfig.FlatAppearance.BorderSize = 0;  // Adicionar esta linha
+            this.btnLimparConfig.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnLimparConfig.Click += new System.EventHandler(this.BtnLimparConfig_Click);
             
             this.grpConfig.Controls.AddRange(new System.Windows.Forms.Control[] {
@@ -210,15 +213,19 @@
             this.btnSelecionarArquivo.Location = new System.Drawing.Point(15, 60);
             this.btnSelecionarArquivo.Size = new System.Drawing.Size(170, 35);
             this.btnSelecionarArquivo.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnSelecionarArquivo.BackColor = System.Drawing.Color.LightGray;
+            this.btnSelecionarArquivo.BackColor = System.Drawing.Color.LightBlue;
             this.btnSelecionarArquivo.Click += new System.EventHandler(this.BtnSelecionarArquivo_Click);
             
+            // btnLimparArquivo
             this.btnLimparArquivo.Text = "🗑️ Limpar Seleção";
             this.btnLimparArquivo.Location = new System.Drawing.Point(195, 60);
             this.btnLimparArquivo.Size = new System.Drawing.Size(130, 35);
             this.btnLimparArquivo.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnLimparArquivo.BackColor = System.Drawing.Color.LightGray;
+            this.btnLimparArquivo.BackColor = System.Drawing.Color.LightBlue; // Cor normal
+            this.btnLimparArquivo.ForeColor = System.Drawing.Color.Black;
             this.btnLimparArquivo.Enabled = false;
+            this.btnLimparArquivo.FlatAppearance.BorderSize = 0;
+            this.btnLimparArquivo.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnLimparArquivo.Click += new System.EventHandler(this.BtnLimparArquivo_Click);
             
             this.grpExcel.Controls.AddRange(new System.Windows.Forms.Control[] {
@@ -246,16 +253,19 @@
             
             this.btnLimparLog.Text = "🧹 Limpar Log";
             this.btnLimparLog.Location = new System.Drawing.Point(15, 255);
-            this.btnLimparLog.Size = new System.Drawing.Size(130, 35);
+            this.btnLimparLog.Size = new System.Drawing.Size(160, 35);
             this.btnLimparLog.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnLimparLog.BackColor = System.Drawing.Color.LightGray;
+            this.btnLimparLog.BackColor = System.Drawing.Color.LightBlue;
             this.btnLimparLog.Click += new System.EventHandler(this.BtnLimparLog_Click);
             
             this.btnExportarLog.Text = "💾 Baixar Log";
-            this.btnExportarLog.Location = new System.Drawing.Point(155, 255);
-            this.btnExportarLog.Size = new System.Drawing.Size(130, 35);
+            this.btnExportarLog.Location = new System.Drawing.Point(190, 255);
+            this.btnExportarLog.Size = new System.Drawing.Size(160, 35);
             this.btnExportarLog.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnExportarLog.BackColor = System.Drawing.Color.LightGray;
+            this.btnExportarLog.BackColor = System.Drawing.Color.LightBlue;
+            this.btnExportarLog.ForeColor = System.Drawing.Color.Black;
+            this.btnExportarLog.FlatAppearance.BorderSize = 0;  // Adicionar esta linha
+            this.btnExportarLog.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnExportarLog.Click += new System.EventHandler(this.BtnExportarLog_Click);
             
             this.grpLogs.Controls.AddRange(new System.Windows.Forms.Control[] {
@@ -268,15 +278,18 @@
             this.grpExecucao.Size = new System.Drawing.Size(920, 90);
             this.grpExecucao.Font = new System.Drawing.Font("Segoe UI", 10, System.Drawing.FontStyle.Bold);
             
-            this.btnIniciar.Text = "▶ INICIAR";
+            this.btnIniciar.Text = "⚠️ AGUARDANDO ARQUIVO E CREDENCIAIS";
             this.btnIniciar.Location = new System.Drawing.Point(15, 28);
             this.btnIniciar.Size = new System.Drawing.Size(440, 45);
             this.btnIniciar.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnIniciar.BackColor = System.Drawing.Color.LightGreen;
-            this.btnIniciar.Font = new System.Drawing.Font("Segoe UI", 12, System.Drawing.FontStyle.Bold);
+            this.btnIniciar.BackColor = System.Drawing.Color.FromArgb(200, 200, 200);
+            this.btnIniciar.ForeColor = System.Drawing.Color.DimGray;
+            this.btnIniciar.Font = new System.Drawing.Font("Segoe UI", 10, System.Drawing.FontStyle.Bold); // Fonte um pouco menor para caber
             this.btnIniciar.Enabled = false;
+            this.btnIniciar.FlatAppearance.BorderSize = 0;
+            this.btnIniciar.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnIniciar.Click += new System.EventHandler(this.BtnIniciar_Click);
-            
+
             this.btnParar.Text = "⏹ PARAR";
             this.btnParar.Location = new System.Drawing.Point(465, 28);
             this.btnParar.Size = new System.Drawing.Size(440, 45);
