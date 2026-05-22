@@ -84,6 +84,19 @@ namespace CadastroProducaoCRE.Services
             if (string.IsNullOrEmpty(password))
                 return "";
 
+            // CORREÇÃO: Verifica se _key está inicializada
+            if (_key == null)
+            {
+                Log("Chave não inicializada, configurando criptografia primeiro");
+                SetupEncryption();
+                
+                if (_key == null)
+                {
+                    Log("Não foi possível inicializar a chave de criptografia");
+                    return "";
+                }
+            }
+
             using (var aes = Aes.Create())
             {
                 aes.Key = _key;
@@ -110,6 +123,13 @@ namespace CadastroProducaoCRE.Services
         {
             if (string.IsNullOrEmpty(encryptedPassword))
                 return "";
+
+            // CORREÇÃO: Verifica se _key está inicializada
+            if (_key == null)
+            {
+                Log("Chave não inicializada para descriptografar");
+                return "";
+            }
 
             try
             {
@@ -193,7 +213,7 @@ namespace CadastroProducaoCRE.Services
                 Log($"Configurações carregadas de: {CONFIG_FILE}");
 
                 // Descriptografa a senha
-                if (data.ContainsKey("password") && data["password"] != null)
+                if ( data != null &&data.ContainsKey("password") && data["password"] != null)
                 {
                     var encryptedPassword = data["password"].ToString();
                     if (!string.IsNullOrEmpty(encryptedPassword))

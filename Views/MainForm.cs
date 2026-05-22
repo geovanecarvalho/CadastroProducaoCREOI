@@ -1,7 +1,9 @@
 using System;
 using System.Windows.Forms;
-using CadastroProducaoCRE.Services;
 using System.Text.Json;
+using System.IO;
+using System.Threading.Tasks;
+using CadastroProducaoCRE.Services;
 
 namespace CadastroProducaoCRE.Views
 {
@@ -10,6 +12,7 @@ namespace CadastroProducaoCRE.Views
         private string _caminhoArquivo = "";
         private ConfigManager _configManager;
         private ToolTip _toolTip;
+        private PlaywrightService? _playwright;
         
         public MainForm()
         {
@@ -19,13 +22,11 @@ namespace CadastroProducaoCRE.Views
             CarregarConfiguracoes();
             AdicionarLog("✅ Aplicação iniciada");
             
-            // Configurar ToolTip
             _toolTip = new ToolTip();
             _toolTip.InitialDelay = 100;
             _toolTip.ReshowDelay = 50;
             _toolTip.AutoPopDelay = 10000;
             _toolTip.ShowAlways = true;
-            
             _toolTip.SetToolTip(btnIniciar, "⚠️ Aguardando dados para iniciar...");
             
             VerificarProntoParaIniciar();
@@ -66,7 +67,6 @@ namespace CadastroProducaoCRE.Views
                 progressBar.Invoke(new Action(ResetarProgresso));
                 return;
             }
-            
             progressBar.Value = 0;
         }
         
@@ -74,139 +74,77 @@ namespace CadastroProducaoCRE.Views
         
         private void SetBotoesHabilitados(bool habilitado)
         {
-            // Botões de configuração
             btnSalvarConfig.Enabled = habilitado;
             btnLimparConfig.Enabled = habilitado;
-            
-            // Botões de arquivo
             btnSelecionarArquivo.Enabled = habilitado;
             btnLimparArquivo.Enabled = habilitado && !string.IsNullOrEmpty(_caminhoArquivo);
-            
-            // Botões de log
             btnLimparLog.Enabled = habilitado;
             btnExportarLog.Enabled = habilitado;
-            
-            // Botão mostrar senha
             btnMostrarSenha.Enabled = habilitado;
-            
-            // CAMPOS DE TEXTO - Bloquear durante processamento
             txtUsuario.Enabled = habilitado;
             txtSenha.Enabled = habilitado;
-            
-            // Checkbox
             chkHeadless.Enabled = habilitado;
-            
-            // Botão iniciar (oposto ao estado de processamento)
             btnIniciar.Enabled = habilitado;
-            
-            // Botão parar (ativo apenas durante processamento)
             btnParar.Enabled = !habilitado;
             
-            // Ajustar cores
             Color corDesabilitado = System.Drawing.Color.FromArgb(200, 200, 200);
             Color corTextoDesabilitado = System.Drawing.Color.DimGray;
             Color corHabilitado = System.Drawing.Color.LightBlue;
             Color corTextoHabilitado = System.Drawing.Color.Black;
             
-            if (!habilitado) // Durante processamento
+            if (!habilitado)
             {
-                // Botões de configuração
                 btnSalvarConfig.BackColor = corDesabilitado;
                 btnLimparConfig.BackColor = corDesabilitado;
                 btnSalvarConfig.ForeColor = corTextoDesabilitado;
                 btnLimparConfig.ForeColor = corTextoDesabilitado;
-                
-                // Botões de arquivo
                 btnSelecionarArquivo.BackColor = corDesabilitado;
                 btnLimparArquivo.BackColor = corDesabilitado;
                 btnSelecionarArquivo.ForeColor = corTextoDesabilitado;
                 btnLimparArquivo.ForeColor = corTextoDesabilitado;
-                
-                // Botões de log
                 btnLimparLog.BackColor = corDesabilitado;
                 btnExportarLog.BackColor = corDesabilitado;
                 btnLimparLog.ForeColor = corTextoDesabilitado;
                 btnExportarLog.ForeColor = corTextoDesabilitado;
-                
-                // Botão mostrar senha
                 btnMostrarSenha.BackColor = corDesabilitado;
                 btnMostrarSenha.ForeColor = corTextoDesabilitado;
-                
-                // Botão iniciar
                 btnIniciar.BackColor = corDesabilitado;
                 btnIniciar.ForeColor = corTextoDesabilitado;
-                
-                // Botão parar (ativo, cor vermelha)
                 btnParar.BackColor = System.Drawing.Color.LightCoral;
                 btnParar.ForeColor = System.Drawing.Color.Black;
                 btnParar.Text = "⏹ PARAR";
-                
-                // Campos de texto - opacos
                 txtUsuario.BackColor = corDesabilitado;
                 txtSenha.BackColor = corDesabilitado;
                 txtUsuario.ForeColor = corTextoDesabilitado;
                 txtSenha.ForeColor = corTextoDesabilitado;
-                
-                // Checkbox
                 chkHeadless.BackColor = corDesabilitado;
                 chkHeadless.ForeColor = corTextoDesabilitado;
             }
-            else // Em espera
+            else
             {
-                // Botões de configuração
                 btnSalvarConfig.BackColor = corHabilitado;
                 btnLimparConfig.BackColor = corHabilitado;
                 btnSalvarConfig.ForeColor = corTextoHabilitado;
                 btnLimparConfig.ForeColor = corTextoHabilitado;
-                
-                // Botões de arquivo
                 btnSelecionarArquivo.BackColor = corHabilitado;
                 btnLimparArquivo.BackColor = corHabilitado;
                 btnSelecionarArquivo.ForeColor = corTextoHabilitado;
                 btnLimparArquivo.ForeColor = corTextoHabilitado;
-                
-                // Botões de log
                 btnLimparLog.BackColor = corHabilitado;
                 btnExportarLog.BackColor = corHabilitado;
                 btnLimparLog.ForeColor = corTextoHabilitado;
                 btnExportarLog.ForeColor = corTextoHabilitado;
-                
-                // Botão mostrar senha - restaurar cor
                 btnMostrarSenha.BackColor = corHabilitado;
                 btnMostrarSenha.ForeColor = corTextoHabilitado;
-                
-                // Botão parar (desabilitado, cor opaca)
-                btnParar.BackColor = System.Drawing.Color.FromArgb(200, 150, 150); // Vermelho opaco
+                btnParar.BackColor = System.Drawing.Color.FromArgb(200, 150, 150);
                 btnParar.ForeColor = System.Drawing.Color.DimGray;
                 btnParar.Text = "⏹ PARAR";
-                
-                // Restaurar campos de texto
                 txtUsuario.BackColor = System.Drawing.Color.White;
                 txtSenha.BackColor = System.Drawing.Color.White;
-                
-                if (txtUsuario.Text == "Digite sua matrícula")
-                {
-                    txtUsuario.ForeColor = System.Drawing.Color.Gray;
-                }
-                else
-                {
-                    txtUsuario.ForeColor = System.Drawing.Color.Black;
-                }
-                
-                if (txtSenha.Text == "Digite sua senha")
-                {
-                    txtSenha.ForeColor = System.Drawing.Color.Gray;
-                }
-                else
-                {
-                    txtSenha.ForeColor = System.Drawing.Color.Black;
-                }
-                
-                // Restaurar checkbox
+                txtUsuario.ForeColor = txtUsuario.Text == "Digite sua matrícula" ? System.Drawing.Color.Gray : System.Drawing.Color.Black;
+                txtSenha.ForeColor = txtSenha.Text == "Digite sua senha" ? System.Drawing.Color.Gray : System.Drawing.Color.Black;
                 chkHeadless.BackColor = System.Drawing.Color.Transparent;
                 chkHeadless.ForeColor = System.Drawing.Color.Black;
-                
-                // O botão iniciar terá sua cor definida pelo VerificarProntoParaIniciar
                 VerificarProntoParaIniciar();
             }
         }
@@ -215,12 +153,9 @@ namespace CadastroProducaoCRE.Views
         
         private void LimparValidacaoCampos()
         {
-            // Resetar txtUsuario
             txtUsuario.Text = "Digite sua matrícula";
             txtUsuario.ForeColor = System.Drawing.Color.Gray;
             txtUsuario.BackColor = System.Drawing.Color.White;
-            
-            // Resetar txtSenha
             txtSenha.PasswordChar = '\0';
             txtSenha.Text = "Digite sua senha";
             txtSenha.ForeColor = System.Drawing.Color.Gray;
@@ -229,14 +164,7 @@ namespace CadastroProducaoCRE.Views
         
         private void ValidarCampoObrigatorio(TextBox textBox, string placeholder)
         {
-            if (textBox.Text == placeholder)
-            {
-                textBox.BackColor = System.Drawing.Color.LightCoral;
-                textBox.ForeColor = System.Drawing.Color.White;
-                return;
-            }
-            
-            if (string.IsNullOrWhiteSpace(textBox.Text))
+            if (textBox.Text == placeholder || string.IsNullOrWhiteSpace(textBox.Text))
             {
                 textBox.BackColor = System.Drawing.Color.LightCoral;
                 textBox.ForeColor = System.Drawing.Color.White;
@@ -248,7 +176,7 @@ namespace CadastroProducaoCRE.Views
             }
         }
         
-        // ========== EVENTOS DO CAMPO MATRÍCULA ==========
+        // ========== EVENTOS DOS CAMPOS ==========
         
         private void TxtUsuario_Enter(object? sender, EventArgs e)
         {
@@ -278,13 +206,9 @@ namespace CadastroProducaoCRE.Views
         private void TxtUsuario_TextChanged(object? sender, EventArgs e)
         {
             if (txtUsuario.Text != "Digite sua matrícula")
-            {
                 ValidarCampoObrigatorio(txtUsuario, "Digite sua matrícula");
-            }
             VerificarProntoParaIniciar();
         }
-        
-        // ========== EVENTOS DO CAMPO SENHA ==========
         
         private void TxtSenha_Enter(object? sender, EventArgs e)
         {
@@ -316,13 +240,10 @@ namespace CadastroProducaoCRE.Views
         private void TxtSenha_TextChanged(object? sender, EventArgs e)
         {
             if (txtSenha.Text != "Digite sua senha")
-            {
                 ValidarCampoObrigatorio(txtSenha, "Digite sua senha");
-            }
             VerificarProntoParaIniciar();
         }
-
-
+        
         // ========== BOTÕES ==========
         
         private void BtnMostrarSenha_Click(object? sender, EventArgs e)
@@ -341,7 +262,6 @@ namespace CadastroProducaoCRE.Views
         
         private void BtnSalvarConfig_Click(object? sender, EventArgs e)
         {
-            // Validar campos antes de salvar
             if (txtUsuario.Text == "Digite sua matrícula" || string.IsNullOrWhiteSpace(txtUsuario.Text))
             {
                 AdicionarLog("❌ Não foi possível salvar: Matrícula é obrigatória!");
@@ -362,7 +282,7 @@ namespace CadastroProducaoCRE.Views
             
             SalvarConfiguracoes();
         }
-                
+        
         private void BtnLimparConfig_Click(object? sender, EventArgs e)
         {
             var resultado = MessageBox.Show("Tem certeza que deseja limpar todas as configurações salvas?\n\nIsso removerá usuário, senha e preferências.", 
@@ -378,7 +298,7 @@ namespace CadastroProducaoCRE.Views
                 VerificarProntoParaIniciar();
             }
         }
-                
+        
         private void BtnSelecionarArquivo_Click(object? sender, EventArgs e)
         {
             using var dialog = new OpenFileDialog();
@@ -391,10 +311,8 @@ namespace CadastroProducaoCRE.Views
                 lblArquivo.Text = _caminhoArquivo;
                 lblArquivo.ForeColor = System.Drawing.Color.Green;
                 btnLimparArquivo.Enabled = true;
-                AdicionarLog($"📂 Arquivo selecionado: {System.IO.Path.GetFileName(_caminhoArquivo)}");
+                AdicionarLog($"📂 Arquivo selecionado: {Path.GetFileName(_caminhoArquivo)}");
                 VerificarProntoParaIniciar();
-
-                // SALVAR AUTOMATICAMENTE APÓS SELECIONAR O ARQUIVO
                 SalvarConfiguracoes();
             }
         }
@@ -407,14 +325,12 @@ namespace CadastroProducaoCRE.Views
             btnLimparArquivo.Enabled = false;
             AdicionarLog("🗑️ Arquivo removido");
             VerificarProntoParaIniciar();
-
-            // SALVAR AUTOMATICAMENTE APÓS LIMPAR O ARQUIVO
             SalvarConfiguracoes();
         }
         
-        private void BtnIniciar_Click(object? sender, EventArgs e)
+        private async void BtnIniciar_Click(object? sender, EventArgs e)
         {
-            // Validação final antes de iniciar
+            // Validação dos campos
             if (txtUsuario.Text == "Digite sua matrícula" || string.IsNullOrWhiteSpace(txtUsuario.Text))
             {
                 AdicionarLog("❌ Matrícula é obrigatória!");
@@ -433,49 +349,97 @@ namespace CadastroProducaoCRE.Views
                 return;
             }
             
+            var urlLogin = "https://oilogin.oi.net.br/nidp/idff/sso?id=OiPasswordClassCorporativoId&sid=0&option=credential&sid=0&target=https%3A%2F%2Fcre.oi.net.br%2FCRE_NEW%2F";
+            var urlIndex = "https://cre.oi.net.br/CRE_NEW/CadastroProducao/Index";
+            var username = txtUsuario.Text;
+            var password = txtSenha.Text;
+            var headless = chkHeadless.Checked;
+            
             AdicionarLog("🚀 Iniciando automação...");
-            // Mudar texto do botão iniciar
+            AdicionarLog($"👤 Usuário: {username}");
+            AdicionarLog($"🖥️ Modo Headless: {(headless ? "Sim" : "Não")}");
+            
             btnIniciar.Text = "⏳ PROCESSANDO...";
-            
-            // Desabilitar botões e campos durante o processamento
             SetBotoesHabilitados(false);
-            
             ResetarProgresso();
             
-            // TODO: Chamar o controller para iniciar a automação
+            // Solicitar OTP
+            AdicionarLog("🔐 Por favor, insira o token OTP...");
+            var otpDialog = new OTPDialog();
+            if (otpDialog.ShowDialog() != DialogResult.OK)
+            {
+                AdicionarLog("❌ Login cancelado - OTP não fornecido");
+                FinalizarExecucao(false);
+                return;
+            }
+            
+            var otp = otpDialog.GetOTP();
+            if (string.IsNullOrEmpty(otp) || otp.Length != 6)
+            {
+                AdicionarLog("❌ OTP inválido! Digite 6 dígitos.");
+                FinalizarExecucao(false);
+                return;
+            }
+            
+            AdicionarLog($"🔐 OTP recebido: {'*' * otp.Length}");
+            
+            // Criar PlaywrightService
+            _playwright = new PlaywrightService(headless);
+            _playwright.OnLog += AdicionarLog;
+            
+            // Evento para novo OTP em caso de erro
+            _playwright.OnRequisitarNovoOTP += async (tentativa) =>
+            {
+                string novoOtp = "";
+                this.Invoke(new Action(() =>
+                {
+                    AdicionarLog($"🔐 Tentativa {tentativa} - OTP incorreto! Por favor, digite um novo OTP.");
+                    var otpDialogLocal = new OTPDialog();
+                    if (otpDialogLocal.ShowDialog() == DialogResult.OK)
+                        novoOtp = otpDialogLocal.GetOTP();
+                }));
+                return await Task.FromResult(novoOtp);
+            };
+            
+            // Inicia navegador e faz o fluxo completo
+            var sucesso = await _playwright.IniciarNavegadorEFazerLogin(urlIndex, urlLogin, username, password, otp);
+            
+            if (sucesso)
+            {
+                AdicionarLog("🌐 Navegador logado e pronto!");
+                AdicionarLog("✅ Página de cadastro carregada!");
+                AdicionarLog("⏸️ Aguardando - Pressione Parar para encerrar");
+            }
+            else
+            {
+                AdicionarLog("❌ Falha ao realizar login!");
+                FinalizarExecucao(false);
+            }
         }
-                
-        private void BtnParar_Click(object? sender, EventArgs e)
+        
+        private async void BtnParar_Click(object? sender, EventArgs e)
         {
-            // Mudar texto e cor do botão parar durante o cancelamento
             btnParar.Text = "⏸ PARANDO...";
             btnParar.BackColor = System.Drawing.Color.Orange;
             btnParar.ForeColor = System.Drawing.Color.Black;
-            btnParar.Enabled = false; // Desabilitar temporariamente para evitar múltiplos cliques
+            btnParar.Enabled = false;
             
-            AdicionarLog("⚠️ Parando automação...");
+            AdicionarLog("⚠️ Solicitando parada da automação...");
             
-            // TODO: Chamar o controller para cancelar a automação
-            
-            // Simular um pequeno delay para o usuário ver a mudança
-            System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
-            timer.Interval = 500;
-            timer.Tick += (s, args) =>
+            if (_playwright != null)
             {
-                timer.Stop();
-                
-                // Reabilitar botões e campos
-                SetBotoesHabilitados(true);
-                
-                // Restaurar texto do botão iniciar
-                btnIniciar.Text = "▶ INICIAR";
-                
-                AdicionarLog("✅ Automação interrompida pelo usuário");
-                
-                // Liberar o timer
-                timer.Dispose();
-            };
-            timer.Start();
+                AdicionarLog("🔒 Fechando navegador...");
+                await _playwright.FecharNavegador();
+                _playwright = null;
+                AdicionarLog("✅ Navegador fechado com sucesso!");
+            }
+            
+            await Task.Delay(500);
+            SetBotoesHabilitados(true);
+            btnIniciar.Text = "▶ INICIAR";
+            AdicionarLog("✅ Automação interrompida pelo usuário");
+            ResetarProgresso();
+            btnParar.Enabled = false;
         }
         
         private void BtnLimparLog_Click(object? sender, EventArgs e)
@@ -493,8 +457,8 @@ namespace CadastroProducaoCRE.Views
             
             if (dialog.ShowDialog() == DialogResult.OK)
             {
-                System.IO.File.WriteAllText(dialog.FileName, txtLog.Text);
-                AdicionarLog($"💾 Log exportado: {System.IO.Path.GetFileName(dialog.FileName)}");
+                File.WriteAllText(dialog.FileName, txtLog.Text);
+                AdicionarLog($"💾 Log exportado: {Path.GetFileName(dialog.FileName)}");
                 MessageBox.Show($"Log exportado com sucesso!\n\n{dialog.FileName}", "Sucesso", 
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -503,152 +467,71 @@ namespace CadastroProducaoCRE.Views
         // ========== VALIDAÇÃO E UTILITÁRIOS ==========
         
         private void VerificarProntoParaIniciar()
-{
-    // Verificar se os controles já foram criados
-    if (txtUsuario == null || txtSenha == null || btnIniciar == null || btnLimparConfig == null || btnLimparArquivo == null)
-        return;
-    
-    // Verificar se o arquivo foi selecionado e existe
-    bool temArquivo = !string.IsNullOrEmpty(_caminhoArquivo) && System.IO.File.Exists(_caminhoArquivo);
-    
-    // Verificar matrícula (ignorando placeholder)
-    bool temUsuario = !string.IsNullOrWhiteSpace(txtUsuario.Text) && 
-                    txtUsuario.Text != "Digite sua matrícula";
-    
-    // Verificar senha (ignorando placeholder)
-    bool temSenha = !string.IsNullOrWhiteSpace(txtSenha.Text) && 
-                    txtSenha.Text != "Digite sua senha";
-    
-    // Verificar se os campos estão vazios (com placeholders)
-    bool camposVazios = (txtUsuario.Text == "Digite sua matrícula" || string.IsNullOrWhiteSpace(txtUsuario.Text)) &&
-                        (txtSenha.Text == "Digite sua senha" || string.IsNullOrWhiteSpace(txtSenha.Text));
-    
-    bool pronto = temArquivo && temUsuario && temSenha;
-    
-    btnIniciar.Enabled = pronto;
-    
-    // Botão Limpar Configurações - desabilitado se os campos já estão vazios
-    btnLimparConfig.Enabled = !camposVazios;
-    
-    // Ajustar cor do btnLimparConfig baseado no estado
-    if (btnLimparConfig.Enabled)
-    {
-        btnLimparConfig.BackColor = System.Drawing.Color.LightBlue;
-        btnLimparConfig.ForeColor = System.Drawing.Color.Black;
-    }
-    else
-    {
-        btnLimparConfig.BackColor = System.Drawing.Color.FromArgb(200, 200, 200);
-        btnLimparConfig.ForeColor = System.Drawing.Color.DimGray;
-    }
-    
-    // Atualizar cor do btnLimparArquivo baseado se há arquivo
-    btnLimparArquivo.Enabled = temArquivo;
-    if (temArquivo)
-    {
-        btnLimparArquivo.BackColor = System.Drawing.Color.LightBlue;
-        btnLimparArquivo.ForeColor = System.Drawing.Color.Black;
-    }
-    else
-    {
-        btnLimparArquivo.BackColor = System.Drawing.Color.FromArgb(200, 200, 200);
-        btnLimparArquivo.ForeColor = System.Drawing.Color.DimGray;
-    }
-    
-    if (pronto)
-    {
-        btnIniciar.Text = "▶ INICIAR";
-        btnIniciar.BackColor = System.Drawing.Color.LightGreen;
-        btnIniciar.ForeColor = System.Drawing.Color.Black;
-        if (_toolTip != null)
-            _toolTip.SetToolTip(btnIniciar, "▶ Clique para iniciar a automação");
-    }
-    else
-    {
-        btnIniciar.BackColor = System.Drawing.Color.FromArgb(200, 200, 200);
-        btnIniciar.ForeColor = System.Drawing.Color.DimGray;
-        
-        bool faltaCredenciais = !temUsuario || !temSenha;
-        bool faltaArquivo = !temArquivo;
-        
-        if (faltaCredenciais && faltaArquivo)
         {
-            btnIniciar.Text = "⚠️ AGUARDANDO ARQUIVO E CREDENCIAIS";
-            if (_toolTip != null)
-                _toolTip.SetToolTip(btnIniciar, "⚠️ Selecione um arquivo Excel e preencha matrícula e senha");
-        }
-        else if (faltaArquivo)
-        {
-            btnIniciar.Text = "⚠️ AGUARDANDO ARQUIVO EXCEL";
-            if (_toolTip != null)
-                _toolTip.SetToolTip(btnIniciar, "⚠️ Clique em 'Selecionar Arquivo Excel' para escolher uma planilha");
-        }
-        else if (faltaCredenciais)
-        {
-            btnIniciar.Text = "⚠️ AGUARDANDO CREDENCIAIS";
-            if (_toolTip != null)
-                _toolTip.SetToolTip(btnIniciar, "⚠️ Preencha sua matrícula e senha nos campos acima");
-        }
-        else
-        {
-            btnIniciar.Text = "▶ INICIAR";
-            if (_toolTip != null)
-                _toolTip.SetToolTip(btnIniciar, "⚠️ Verifique os campos obrigatórios");
-        }
-    }
-}
-        
-        private void FinalizarExecucao(bool sucesso)
-        {
-            // Reabilitar botões e campos
-            SetBotoesHabilitados(true);
+            if (txtUsuario == null || txtSenha == null || btnIniciar == null) return;
             
-            // Restaurar texto do botão iniciar
-            btnIniciar.Text = "▶ INICIAR";
+            bool temArquivo = !string.IsNullOrEmpty(_caminhoArquivo) && File.Exists(_caminhoArquivo);
+            bool temUsuario = !string.IsNullOrWhiteSpace(txtUsuario.Text) && txtUsuario.Text != "Digite sua matrícula";
+            bool temSenha = !string.IsNullOrWhiteSpace(txtSenha.Text) && txtSenha.Text != "Digite sua senha";
+            bool pronto = temArquivo && temUsuario && temSenha;
             
-            if (sucesso)
+            btnIniciar.Enabled = pronto;
+            btnLimparConfig.Enabled = (txtUsuario.Text != "Digite sua matrícula" && !string.IsNullOrWhiteSpace(txtUsuario.Text)) ||
+                                      (txtSenha.Text != "Digite sua senha" && !string.IsNullOrWhiteSpace(txtSenha.Text));
+            
+            if (pronto)
             {
-                AdicionarLog("✅ Execução concluída com sucesso!");
+                btnIniciar.Text = "▶ INICIAR";
+                btnIniciar.BackColor = System.Drawing.Color.LightGreen;
+                btnIniciar.ForeColor = System.Drawing.Color.Black;
+                _toolTip?.SetToolTip(btnIniciar, "▶ Clique para iniciar a automação");
             }
             else
             {
-                AdicionarLog("❌ Execução finalizada com erros!");
+                btnIniciar.BackColor = System.Drawing.Color.FromArgb(200, 200, 200);
+                btnIniciar.ForeColor = System.Drawing.Color.DimGray;
+                
+                if ((!temUsuario || !temSenha) && !temArquivo)
+                    btnIniciar.Text = "⚠️ AGUARDANDO ARQUIVO E CREDENCIAIS";
+                else if (!temArquivo)
+                    btnIniciar.Text = "⚠️ AGUARDANDO ARQUIVO EXCEL";
+                else if (!temUsuario || !temSenha)
+                    btnIniciar.Text = "⚠️ AGUARDANDO CREDENCIAIS";
+                else
+                    btnIniciar.Text = "▶ INICIAR";
             }
+        }
+        
+        private void FinalizarExecucao(bool sucesso)
+        {
+            SetBotoesHabilitados(true);
+            btnIniciar.Text = "▶ INICIAR";
+            AdicionarLog(sucesso ? "✅ Execução concluída com sucesso!" : "❌ Execução finalizada com erros!");
             VerificarProntoParaIniciar();
         }
         
         public void OnAutomacaoConcluida(bool sucesso)
         {
-            if (this.InvokeRequired)
+            if (InvokeRequired)
             {
-                this.Invoke(new Action(() => OnAutomacaoConcluida(sucesso)));
+                Invoke(new Action(() => OnAutomacaoConcluida(sucesso)));
                 return;
             }
-            
             FinalizarExecucao(sucesso);
         }
-
+        
         private void BtnSuporte_Click(object? sender, EventArgs e)
         {
             string mensagem = 
-                "🛠️ SUPORTE TÉCNICO\n\n" +
-                "📧 E-mail: geovanehacker.io@gmail.com\n\n" +
-                "📋 PARA ENVIAR O SUPORTE:\n" +
-                "• Clique em 'Baixar Log' para salvar o arquivo de log\n" +
-                "• Tire um print da tela do erro (Print Screen)\n" +
-                "• Envie um e-mail para o endereço acima anexando o log e o print\n" +
-                "• Descreva o problema no e-mail\n\n" +
-                "ℹ️ Informações do sistema serão incluídas automaticamente no log.\n\n" +
-                "Clique em OK para copiar o e-mail automaticamente.";
+                "🛠️ SUPORTE TÉCNICO\n\n📧 E-mail: geovanehacker.io@gmail.com\n\n📋 PARA ENVIAR O SUPORTE:\n• Clique em 'Baixar Log' para salvar o arquivo de log\n• Tire um print da tela do erro\n• Envie um e-mail para o endereço acima anexando o log e o print\n• Descreva o problema no e-mail\n\nℹ️ Informações do sistema serão incluídas automaticamente no log.\n\nClique em OK para copiar o e-mail automaticamente.";
             
             if (MessageBox.Show(mensagem, "Suporte Técnico", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) == DialogResult.OK)
             {
                 Clipboard.SetText("geovanehacker.io@gmail.com");
-                MessageBox.Show("✅ E-mail copiado para a área de transferência!", "Copiado", 
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("✅ E-mail copiado para a área de transferência!", "Copiado", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
-
+        
         private void CarregarConfiguracoes()
         {
             try
@@ -677,94 +560,105 @@ namespace CadastroProducaoCRE.Views
                         txtSenha.Text = senha;
                         txtSenha.PasswordChar = '*';
                         txtSenha.ForeColor = System.Drawing.Color.Black;
-                        AdicionarLog($"   ✅ Senha carregada (criptografada)");
+                        AdicionarLog($"   ✅ Senha carregada");
                     }
                 }
                 
-                // Carregar modo headless
+                // Carregar modo headless - CORRIGIDO
                 if (config.ContainsKey("headless"))
                 {
-                    var headlessValue = config["headless"];
-                    if (headlessValue is bool boolValue)
+                    try
                     {
-                        chkHeadless.Checked = boolValue;
-                        AdicionarLog($"   ✅ Headless: {boolValue}");
+                        var headlessValue = config["headless"];
+                        
+                        if (headlessValue is bool boolValue)
+                        {
+                            chkHeadless.Checked = boolValue;
+                        }
+                        else if (headlessValue is JsonElement jsonElement)
+                        {
+                            chkHeadless.Checked = jsonElement.GetBoolean();
+                        }
+                        else
+                        {
+                            chkHeadless.Checked = Convert.ToBoolean(headlessValue);
+                        }
+                        AdicionarLog($"   ✅ Headless: {chkHeadless.Checked}");
                     }
-                    else if (headlessValue is JsonElement jsonElement)
+                    catch (Exception ex)
                     {
-                        chkHeadless.Checked = jsonElement.GetBoolean();
-                        AdicionarLog($"   ✅ Headless: {jsonElement.GetBoolean()}");
+                        AdicionarLog($"   ⚠️ Erro ao carregar headless: {ex.Message}");
+                        chkHeadless.Checked = false;
                     }
                 }
                 
                 // Carregar último arquivo usado
-                object lastFileObj = null;
-                if (config.ContainsKey("last_file"))
+                if (config.ContainsKey("last_file") && config["last_file"] != null)
                 {
-                    lastFileObj = config["last_file"];
-                }
-                
-                string lastFile = null;
-                if (lastFileObj is string str)
-                {
-                    lastFile = str;
-                }
-                else if (lastFileObj is JsonElement jsonElem)
-                {
-                    lastFile = jsonElem.GetString();
-                }
-                
-                AdicionarLog($"   📁 Último arquivo do config: '{lastFile}'");
-                
-                if (!string.IsNullOrEmpty(lastFile) && File.Exists(lastFile))
-                {
-                    _caminhoArquivo = lastFile;
-                    lblArquivo.Text = _caminhoArquivo;
-                    lblArquivo.ForeColor = System.Drawing.Color.Green;
-                    btnLimparArquivo.Enabled = true;
-                    AdicionarLog($"   ✅ Arquivo carregado: {Path.GetFileName(lastFile)}");
-                }
-                else if (!string.IsNullOrEmpty(lastFile))
-                {
-                    AdicionarLog($"   ⚠️ Arquivo não encontrado: {lastFile}");
-                }
-                
-                // Carregar geometria da janela
-                if (config.ContainsKey("window_geometry"))
-                {
-                    var geometry = config["window_geometry"] as Dictionary<string, object>;
-                    if (geometry == null && config["window_geometry"] is JsonElement jsonGeom)
-                    {
-                        geometry = new Dictionary<string, object>();
-                        foreach (var prop in jsonGeom.EnumerateObject())
-                        {
-                            geometry[prop.Name] = prop.Value.GetInt32();
-                        }
-                    }
+                    string lastFile = config["last_file"].ToString();
+                    AdicionarLog($"   📁 Último arquivo do config: '{lastFile}'");
                     
-                    if (geometry != null)
+                    if (!string.IsNullOrEmpty(lastFile) && File.Exists(lastFile))
                     {
-                        if (geometry.ContainsKey("x") && geometry["x"] != null)
-                            this.Location = new System.Drawing.Point(Convert.ToInt32(geometry["x"]), this.Location.Y);
-                        if (geometry.ContainsKey("y") && geometry["y"] != null)
-                            this.Location = new System.Drawing.Point(this.Location.X, Convert.ToInt32(geometry["y"]));
-                        if (geometry.ContainsKey("width") && geometry["width"] != null)
-                            this.Size = new System.Drawing.Size(Convert.ToInt32(geometry["width"]), this.Size.Height);
-                        if (geometry.ContainsKey("height") && geometry["height"] != null)
-                            this.Size = new System.Drawing.Size(this.Size.Width, Convert.ToInt32(geometry["height"]));
+                        _caminhoArquivo = lastFile;
+                        lblArquivo.Text = _caminhoArquivo;
+                        lblArquivo.ForeColor = System.Drawing.Color.Green;
+                        btnLimparArquivo.Enabled = true;
+                        AdicionarLog($"   ✅ Arquivo carregado: {Path.GetFileName(lastFile)}");
+                    }
+                    else if (!string.IsNullOrEmpty(lastFile))
+                    {
+                        AdicionarLog($"   ⚠️ Arquivo não encontrado: {lastFile}");
+                    }
+                }
+                
+                // Carregar geometria da janela - CORRIGIDO
+                if (config.ContainsKey("window_geometry") && config["window_geometry"] != null)
+                {
+                    try
+                    {
+                        var geometryDict = new Dictionary<string, int>();
+                        var geometryObj = config["window_geometry"];
+                        
+                        if (geometryObj is JsonElement jsonGeom)
+                        {
+                            foreach (var property in jsonGeom.EnumerateObject())
+                            {
+                                geometryDict[property.Name] = property.Value.GetInt32();
+                            }
+                        }
+                        else if (geometryObj is Dictionary<string, object> dict)
+                        {
+                            foreach (var kvp in dict)
+                            {
+                                if (kvp.Value != null)
+                                    geometryDict[kvp.Key] = Convert.ToInt32(kvp.Value);
+                            }
+                        }
+                        
+                        if (geometryDict.ContainsKey("x"))
+                            this.Location = new System.Drawing.Point(geometryDict["x"], this.Location.Y);
+                        if (geometryDict.ContainsKey("y"))
+                            this.Location = new System.Drawing.Point(this.Location.X, geometryDict["y"]);
+                        if (geometryDict.ContainsKey("width"))
+                            this.Size = new System.Drawing.Size(geometryDict["width"], this.Size.Height);
+                        if (geometryDict.ContainsKey("height"))
+                            this.Size = new System.Drawing.Size(this.Size.Width, geometryDict["height"]);
+                        
                         AdicionarLog($"   ✅ Geometria da janela carregada");
                     }
+                    catch (Exception ex)
+                    {
+                        AdicionarLog($"   ⚠️ Erro ao carregar geometria: {ex.Message}");
+                    }
                 }
                 
-                // Verificar se há algo para limpar e atualizar UI
                 VerificarProntoParaIniciar();
-                
                 AdicionarLog("✅ Configurações carregadas com sucesso");
             }
             catch (Exception ex)
             {
                 AdicionarLog($"⚠️ Erro ao carregar configurações: {ex.Message}");
-                AdicionarLog($"   Detalhes: {ex.StackTrace}");
             }
         }
         
@@ -778,28 +672,23 @@ namespace CadastroProducaoCRE.Views
                 ["last_file"] = _caminhoArquivo,
                 ["window_geometry"] = new Dictionary<string, int>
                 {
-                    ["x"] = this.Location.X,
-                    ["y"] = this.Location.Y,
-                    ["width"] = this.Size.Width,
-                    ["height"] = this.Size.Height
+                    ["x"] = Location.X,
+                    ["y"] = Location.Y,
+                    ["width"] = Size.Width,
+                    ["height"] = Size.Height
                 }
             };
             
             if (_configManager.SaveConfig(config))
-            {
                 AdicionarLog("💾 Configurações salvas com sucesso!");
-            }
             else
-            {
                 AdicionarLog("❌ Erro ao salvar configurações");
-            }
         }
-
+        
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
-            AdicionarLog($"📝 Salvando ao fechar - Arquivo atual: '{_caminhoArquivo}'");
-            SalvarConfiguracoes();  // Salva configurações ao fechar
+            SalvarConfiguracoes();
         }
     }
 }
