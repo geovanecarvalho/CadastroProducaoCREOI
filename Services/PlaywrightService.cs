@@ -147,7 +147,7 @@ namespace CadastroProducaoCRE.Services
                 // Criar contexto com configurações realistas
                 var contextoConfig = new BrowserNewContextOptions
                 {
-                    ViewportSize = new ViewportSize { Width = 1366, Height = 768 }, // Tamanho mais comum
+                    ViewportSize = new ViewportSize { Width = 1366, Height = 768 },
                     UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     IgnoreHTTPSErrors = true,
                     Locale = "pt-BR",
@@ -157,8 +157,18 @@ namespace CadastroProducaoCRE.Services
                     HasTouch = false,
                     IsMobile = false
                 };
-                
+
+                // CARREGAR SESSÃO SALVA SE EXISTIR
+                var storageState = await CarregarSessao();
+                if (!string.IsNullOrEmpty(storageState))
+                {
+                    contextoConfig.StorageState = storageState;
+                    Log("📂 Sessão anterior carregada");
+                }
+
                 _context = await _browser.NewContextAsync(contextoConfig);
+                
+                // ========== CRIA A PÁGINA ==========
                 _page = await _context.NewPageAsync();
                 
                 // Scripts anti-detecção
@@ -1024,24 +1034,40 @@ namespace CadastroProducaoCRE.Services
                 
                 if (File.Exists(SESSION_FILE))
                 {
-                    Log("📂 Sessão encontrada. Tentando carregar...");
-                    
-                    // Inicia navegador com sessão
-                    if (await IniciarNavegadorComSessao(urlLogin, urlIndex))
+                    var fileInfo = new FileInfo(SESSION_FILE);
+                    if (fileInfo.Length > 100)
                     {
-                        Log("✅ Login automático com sessão salva realizado com sucesso!");
-                        return true;
-                    }
-                    else
-                    {
-                        Log("⚠️ Sessão expirada ou inválida. Será necessário novo login.");
+                        Log("📂 Sessão encontrada. Tentando carregar...");
+                        
+                        // NÃO CHAMA IniciarNavegadorComSessao - usa diretamente o IniciarNavegador com sessão
+                        if (!await IniciarNavegador())
+                        {
+                            Log("❌ Falha ao iniciar navegador");
+                            return false;
+                        }
+                        
+                        // Tenta acessar diretamente a página do CRE
+                        Log($"🌍 Tentando acessar: {urlIndex}");
+                        await _page!.GotoAsync(urlIndex, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+                        await Task.Delay(5000);
+                        
+                        if (await VerificarSessaoValida())
+                        {
+                            Log("✅ Sessão válida! Login automático realizado!");
+                            return true;
+                        }
+                        else
+                        {
+                            Log("⚠️ Sessão inválida ou expirada. Será necessário novo login.");
+                            await FecharNavegador();
+                        }
                     }
                 }
                 
                 // 2. Se não tem sessão ou sessão inválida, faz login completo
                 Log("🔄 Realizando login completo...");
                 
-                // Inicia navegador
+                // Inicia navegador (sem sessão)
                 if (!await IniciarNavegador())
                 {
                     Log("❌ Falha ao iniciar navegador");
@@ -1064,14 +1090,12 @@ namespace CadastroProducaoCRE.Services
                     tentativaAtual++;
                     Log($"📌 Tentativa {tentativaAtual} de {maxTentativas}");
                     
-                    // Se não for a primeira tentativa, recarrega a página e pede novo OTP
                     if (tentativaAtual > 1)
                     {
                         Log("🔄 Recarregando página para nova tentativa...");
                         await _page.ReloadAsync();
                         await Task.Delay(3000);
                         
-                        // Pede novo OTP
                         if (OnRequisitarNovoOTP != null)
                         {
                             var novoOtp = await OnRequisitarNovoOTP.Invoke(tentativaAtual);
@@ -1088,29 +1112,23 @@ namespace CadastroProducaoCRE.Services
                         }
                     }
                     
-                    // Preenche os campos (sem clicar no botão)
                     if (!await PreencherCamposLogin(username, password, otpAtual))
                     {
                         Log("❌ Falha ao preencher campos");
                         continue;
                     }
                     
-                    // Aguarda o usuário clicar manualmente em Entrar
                     Log("⏳ Aguardando usuário clicar em Entrar...");
                     
-                    // Aguarda o login ser detectado ou aparecer mensagem de erro
                     var resultado = await AguardarLoginOuErro(60);
                     
                     if (resultado == LoginResult.Sucesso)
                     {
                         Log("✅ Login detectado com sucesso!");
                         loginSucesso = true;
-                        
-                        // Salva a sessão
                         await SalvarSessao();
                         Log("💾 Sessão salva com sucesso!");
                         
-                        // Navega para página de cadastro
                         Log($"🌍 Navegando para página de cadastro: {urlIndex}");
                         await _page.GotoAsync(urlIndex, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
                         await Task.Delay(3000);
@@ -1118,17 +1136,14 @@ namespace CadastroProducaoCRE.Services
                     else if (resultado == LoginResult.Erro)
                     {
                         Log("⚠️ Erro no login! Verifique suas credenciais.");
-                        
                         if (tentativaAtual >= maxTentativas)
                         {
                             Log($"❌ Número máximo de tentativas ({maxTentativas}) atingido!");
                             return false;
                         }
-                        
-                        Log("🔄 Nova tentativa será iniciada...");
                         continue;
                     }
-                    else // Timeout
+                    else
                     {
                         Log("❌ Timeout - Login não detectado");
                         return false;
@@ -1199,90 +1214,89 @@ namespace CadastroProducaoCRE.Services
             return LoginResult.Timeout;
         }
 
-    public async Task<bool> IniciarNavegadorComSessao(string urlLogin, string urlIndex)
-    {
-        try
+        public async Task<bool> IniciarNavegadorComSessao(string urlLogin, string urlIndex)
         {
-            if (!File.Exists(SESSION_FILE))
+            try
             {
-                Log("ℹ️ Nenhuma sessão salva encontrada");
-                return false;
-            }
-            
-            var fileInfo = new FileInfo(SESSION_FILE);
-            if (fileInfo.Length < 100)
-            {
-                Log("⚠️ Arquivo de sessão corrompido");
-                return false;
-            }
-            
-            Log("🔄 Carregando sessão salva...");
-            
-            // Carrega a sessão
-            var storageState = await File.ReadAllTextAsync(SESSION_FILE);
-            
-            // Inicia navegador com a sessão
-            if (!await IniciarNavegador())
-            {
-                Log("❌ Falha ao iniciar navegador");
-                return false;
-            }
-            
-            // Recria o contexto com a sessão
-            await _context!.CloseAsync();
-            
-            var contextoConfig = new BrowserNewContextOptions
-            {
-                ViewportSize = new ViewportSize { Width = 800, Height = 600 },
-                UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                IgnoreHTTPSErrors = true,
-                StorageState = storageState
-            };
-            
-            _context = await _browser!.NewContextAsync(contextoConfig);
-            _page = await _context.NewPageAsync();
-            
-            // Tenta acessar diretamente a página do CRE
-            Log($"🌍 Tentando acessar: {urlIndex}");
-            await _page.GotoAsync(urlIndex, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-            await Task.Delay(5000);
-            
-            var currentUrl = _page.Url;
-            Log($"📍 URL atual: {currentUrl}");
-            
-            // Verifica se está logado
-            if (currentUrl.Contains("cre.oi.net.br") && !currentUrl.Contains("login"))
-            {
-                Log("✅ Sessão válida! Acessou diretamente.");
-                
-                // Verifica elemento do usuário
-                var userLabel = await _page.QuerySelectorAsync("label:has-text(\"Usuário:\")");
-                if (userLabel != null)
+                if (!File.Exists(SESSION_FILE))
                 {
-                    var userText = await userLabel.TextContentAsync();
-                    Log($"👤 Usuário logado: {userText?.Trim()}");
+                    Log("ℹ️ Nenhuma sessão salva encontrada");
+                    return false;
                 }
                 
-                return true;
-            }
-            
-            // Verifica se ainda está na página de login (sessão inválida)
-            if (currentUrl.Contains("oilogin.oi.net.br") || currentUrl.Contains("login"))
-            {
-                Log("⚠️ Sessão inválida ou expirada");
-                await FecharNavegador();
+                var fileInfo = new FileInfo(SESSION_FILE);
+                if (fileInfo.Length < 100)
+                {
+                    Log("⚠️ Arquivo de sessão corrompido");
+                    return false;
+                }
+                
+                Log("🔄 Carregando sessão salva...");
+                
+                // Carrega a sessão
+                var storageState = await File.ReadAllTextAsync(SESSION_FILE);
+                
+                // INICIA O NAVEGADOR PRIMEIRO
+                if (!await IniciarNavegador())
+                {
+                    Log("❌ Falha ao iniciar navegador");
+                    return false;
+                }
+                
+                // Fecha o contexto atual e cria um novo com a sessão
+                if (_context != null)
+                {
+                    await _context.CloseAsync();
+                }
+                
+                var contextoConfig = new BrowserNewContextOptions
+                {
+                    ViewportSize = new ViewportSize { Width = 1366, Height = 768 },
+                    UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    IgnoreHTTPSErrors = true,
+                    StorageState = storageState
+                };
+                
+                if (_browser == null)
+                {
+                    Log("❌ Browser não disponível");
+                    return false;
+                }
+                
+                _context = await _browser.NewContextAsync(contextoConfig);
+                _page = await _context.NewPageAsync();
+                
+                // Tenta acessar diretamente a página do CRE
+                Log($"🌍 Tentando acessar: {urlIndex}");
+                await _page.GotoAsync(urlIndex, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+                await Task.Delay(5000);
+                
+                var currentUrl = _page.Url;
+                Log($"📍 URL atual: {currentUrl}");
+                
+                // Verifica se está logado
+                if (currentUrl.Contains("cre.oi.net.br") && !currentUrl.Contains("login"))
+                {
+                    Log("✅ Sessão válida! Acessou diretamente.");
+                    return true;
+                }
+                
+                // Verifica se ainda está na página de login (sessão inválida)
+                if (currentUrl.Contains("oilogin.oi.net.br") || currentUrl.Contains("login"))
+                {
+                    Log("⚠️ Sessão inválida ou expirada");
+                    return false;
+                }
+                
                 return false;
             }
+            catch (Exception ex)
+            {
+                Log($"❌ Erro ao carregar sessão: {ex.Message}");
+                return false;
+            }
+        }
             
-            return false;
-        }
-        catch (Exception ex)
-        {
-            Log($"❌ Erro ao carregar sessão: {ex.Message}");
-            await FecharNavegador();
-            return false;
-        }
-    }
         public async Task<byte[]> CapturarCaptcha()
         {
             try
