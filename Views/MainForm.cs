@@ -393,10 +393,13 @@ namespace CadastroProducaoCRE.Views
                 string novoOtp = "";
                 this.Invoke(new Action(() =>
                 {
-                    AdicionarLog($"🔐 Tentativa {tentativa} - OTP incorreto! Por favor, digite um novo OTP.");
-                    var otpDialogLocal = new OTPDialog();
-                    if (otpDialogLocal.ShowDialog() == DialogResult.OK)
-                        novoOtp = otpDialogLocal.GetOTP();
+                    AdicionarLog($"🔐 Tentativa {tentativa} - Login falhou! Por favor, digite um novo OTP.");
+                    var otpDialog = new OTPDialog();
+                    if (otpDialog.ShowDialog() == DialogResult.OK)
+                    {
+                        novoOtp = otpDialog.GetOTP();
+                        AdicionarLog($"🔐 Novo OTP recebido: {'*' * novoOtp.Length}");
+                    }
                 }));
                 return await Task.FromResult(novoOtp);
             };

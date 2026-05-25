@@ -4,6 +4,8 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using CadastroProducaoCRE.Views;
+using Microsoft.Playwright;
 
 namespace CadastroProducaoCRE.Services
 {
@@ -20,7 +22,7 @@ namespace CadastroProducaoCRE.Services
         
         private static readonly string SESSION_DIR = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), 
-            ".meu_app", "session");
+            ".cadastro_producao_cre", "session");
         private static readonly string SESSION_FILE = Path.Combine(SESSION_DIR, "auth.json");
         
         public PlaywrightService(bool headless = false)
@@ -92,15 +94,42 @@ namespace CadastroProducaoCRE.Services
         {
             try
             {
-                Log("🌐 Iniciando navegador...");
+                Log("🌐 Iniciando navegador (modo anti-detecção)...");
                 
                 _playwright = await Playwright.CreateAsync();
                 
+                // Argumentos avançados para evitar detecção
                 var args = new List<string>
                 {
                     "--disable-blink-features=AutomationControlled",
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage"
+                    "--disable-features=IsolateOrigins,site-per-process",
+                    "--disable-site-isolation-trials",
+                    "--disable-web-security",
+                    "--disable-features=BlockInsecurePrivateNetworkRequests",
+                    "--disable-automation",
+                    "--disable-default-apps",
+                    "--disable-extensions",
+                    "--disable-component-extensions-with-background-pages",
+                    "--disable-sync",
+                    "--metrics-recording-only",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-background-networking",
+                    "--disable-background-timer-throttling",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-breakpad",
+                    "--disable-client-side-phishing-detection",
+                    "--disable-crash-reporter",
+                    "--disable-domain-reliability",
+                    "--disable-ipc-flooding-protection",
+                    "--disable-popup-blocking",
+                    "--disable-prompt-on-repost",
+                    "--disable-renderer-backgrounding",
+                    "--force-fieldtrials=*BackgroundTracing/default/",
+                    "--test-type=webdriver",
+                    "--mute-audio",
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox"
                 };
                 
                 if (_headless)
@@ -115,30 +144,60 @@ namespace CadastroProducaoCRE.Services
                     Args = args
                 });
                 
-                // Carregar sessão salva
-                var storageState = await CarregarSessao();
-                
+                // Criar contexto com configurações realistas
                 var contextoConfig = new BrowserNewContextOptions
                 {
-                    ViewportSize = new ViewportSize { Width = 800, Height = 600 },
-                    UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    IgnoreHTTPSErrors = true
+                    ViewportSize = new ViewportSize { Width = 1366, Height = 768 }, // Tamanho mais comum
+                    UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    IgnoreHTTPSErrors = true,
+                    Locale = "pt-BR",
+                    TimezoneId = "America/Sao_Paulo",
+                    Permissions = new[] { "geolocation" },
+                    DeviceScaleFactor = 1,
+                    HasTouch = false,
+                    IsMobile = false
                 };
                 
-                if (!string.IsNullOrEmpty(storageState))
-                {
-                    contextoConfig.StorageState = storageState;
-                    _context = await _browser.NewContextAsync(contextoConfig);
-                    Log("✅ Sessão anterior carregada (login persistente)");
-                }
-                else
-                {
-                    _context = await _browser.NewContextAsync(contextoConfig);
-                    Log("✅ Novo contexto criado");
-                }
-                
+                _context = await _browser.NewContextAsync(contextoConfig);
                 _page = await _context.NewPageAsync();
-                Log("✅ Navegador iniciado com sucesso");
+                
+                // Scripts anti-detecção
+                await _page.AddInitScriptAsync(@"
+                    () => {
+                        // Remover propriedade webdriver
+                        Object.defineProperty(navigator, 'webdriver', {
+                            get: () => undefined
+                        });
+                        
+                        // Remover plugins vazios
+                        Object.defineProperty(navigator, 'plugins', {
+                            get: () => [1, 2, 3, 4, 5]
+                        });
+                        
+                        // Adicionar languages
+                        Object.defineProperty(navigator, 'languages', {
+                            get: () => ['pt-BR', 'pt', 'en-US', 'en']
+                        });
+                        
+                        // Adicionar platform
+                        Object.defineProperty(navigator, 'platform', {
+                            get: () => 'Win32'
+                        });
+                        
+                        // Simular chrome
+                        window.chrome = { runtime: {} };
+                        
+                        // Adicionar permissões
+                        const originalQuery = window.navigator.permissions.query;
+                        window.navigator.permissions.query = (parameters) => (
+                            parameters.name === 'notifications' ?
+                                Promise.resolve({ state: Notification.permission }) :
+                                originalQuery(parameters)
+                        );
+                    }
+                ");
+                
+                Log("✅ Navegador iniciado com sucesso (anti-detecção ativada)");
                 return true;
             }
             catch (Exception ex)
@@ -198,17 +257,81 @@ namespace CadastroProducaoCRE.Services
                 if (_page == null) return false;
                 
                 var senhaCompleta = password + otp;
-                Log("=".PadRight(50, '='));
-                Log("🔐 PREENCHENDO CAMPOS DE LOGIN");
-                Log("=".PadRight(50, '='));
-                Log($"👤 Usuário: {username}");
-                Log($"🔑 Senha + OTP: {'*' * senhaCompleta.Length}");
                 
-                // Aguarda a página estabilizar
-                await Task.Delay(2000);
+                // === 1. PRIMEIRO: CAPTCHA ===
+                Log("🔍 Capturando CAPTCHA...");
                 
-                // === CAMPO DE USUÁRIO ===
-                Log("🔍 Procurando campo de usuário...");
+                byte[] captchaImage = null;
+                string captchaTexto = "";
+                bool captchaResolvido = false;
+                
+                while (!captchaResolvido)
+                {
+                    captchaImage = await CapturarCaptcha();
+                    
+                    if (captchaImage == null)
+                    {
+                        Log("⚠️ Não foi possível capturar o CAPTCHA.");
+                        return false;
+                    }
+                    
+                    var captchaDialog = new CaptchaDialog(captchaImage, async () =>
+                    {
+                        await RecarregarCaptcha();
+                        return await CapturarCaptcha();
+                    });
+                    
+                    if (captchaDialog.ShowDialog() == DialogResult.OK)
+                    {
+                        captchaTexto = captchaDialog.CaptchaTexto;
+                        Log($"🔐 CAPTCHA informado: {captchaTexto}");
+                        
+                        var captchaField = await _page.QuerySelectorAsync("#textVerificacao");
+                        if (captchaField != null)
+                        {
+                            await captchaField.ClickAsync();
+                            await captchaField.PressAsync("Control+A");
+                            await captchaField.PressAsync("Delete");
+                            await captchaField.FillAsync(captchaTexto);
+                            Log("✅ CAPTCHA preenchido!");
+                        }
+                        else
+                        {
+                            Log("❌ Campo do CAPTCHA não encontrado!");
+                            return false;
+                        }
+                        
+                        captchaResolvido = true;
+                    }
+                    else
+                    {
+                        Log("❌ Usuário cancelou a resolução do CAPTCHA");
+                        return false;
+                    }
+                }
+                
+                await Task.Delay(500);
+                
+                // === 2. SEGUNDO: SENHA ===
+                Log("🔍 Preenchendo campo de senha...");
+                var passwordField = await _page.QuerySelectorAsync("#password, #senha, input[type=\"password\"]");
+                if (passwordField != null)
+                {
+                    await passwordField.ClickAsync();
+                    await passwordField.PressAsync("Control+A");
+                    await passwordField.PressAsync("Delete");
+                    await passwordField.FillAsync(senhaCompleta);
+                    Log($"✅ Senha + OTP preenchida");
+                }
+                else
+                {
+                    Log("❌ Campo de senha não encontrado!");
+                }
+                
+                await Task.Delay(500);
+                
+                // === 3. TERCEIRO: USUÁRIO ===
+                Log("🔍 Preenchendo campo de usuário...");
                 var userField = await _page.QuerySelectorAsync("#username, #user, input[type=\"text\"]");
                 if (userField == null)
                     userField = await _page.QuerySelectorAsync("input[name=\"user\"], input[name=\"username\"]");
@@ -216,85 +339,70 @@ namespace CadastroProducaoCRE.Services
                 if (userField != null)
                 {
                     await userField.ClickAsync();
-                    await Task.Delay(300);
                     await userField.PressAsync("Control+A");
-                    await Task.Delay(300);
                     await userField.PressAsync("Delete");
-                    await Task.Delay(300);
                     await userField.FillAsync(username);
                     Log($"✅ Usuário preenchido: {username}");
                 }
                 else
                 {
                     Log("❌ Campo de usuário não encontrado!");
-                    return false;
                 }
                 
                 await Task.Delay(500);
                 
-                // === CAMPO DE SENHA ===
-                Log("🔍 Procurando campo de senha...");
-                var passwordField = await _page.QuerySelectorAsync("#password, #senha, input[type=\"password\"]");
-                if (passwordField != null)
+                // === 4. CLICAR NO BOTÃO DE LOGIN ===
+                Log("🔍 Procurando botão 'efetuar login'...");
+                
+                var loginSelectors = new[]
                 {
-                    await passwordField.ClickAsync();
-                    await Task.Delay(300);
-                    await passwordField.PressAsync("Control+A");
-                    await Task.Delay(300);
-                    await passwordField.PressAsync("Delete");
-                    await Task.Delay(300);
-                    await passwordField.FillAsync(senhaCompleta);
-                    Log($"✅ Senha + OTP preenchida");
-                }
-                else
+                    "button:has-text('efetuar login')",
+                    "button:has-text('Efetuar Login')",
+                    "button:has-text('Entrar')",
+                    "button:has-text('Login')",
+                    "button[type='submit']",
+                    ".btn-oi-new",
+                    "button.btn-block"
+                };
+                
+                bool clicou = false;
+                foreach (var selector in loginSelectors)
                 {
-                    Log("❌ Campo de senha não encontrado!");
-                    return false;
-                }
-                
-                // NÃO PRESSIONA ENTER - NÃO SUBMETE O FORMULÁRIO
-                
-                
-                // Injeta mensagem visual na página
-                await _page.EvaluateAsync(@"
-                    function() {
-                        var oldDiv = document.getElementById('automacao-status');
-                        if (oldDiv) oldDiv.remove();
-                        
-                        var div = document.createElement('div');
-                        div.id = 'automacao-status';
-                        div.style.position = 'fixed';
-                        div.style.top = '10px';
-                        div.style.right = '10px';
-                        div.style.backgroundColor = '#4CAF50';
-                        div.style.color = 'white';
-                        div.style.padding = '15px';
-                        div.style.zIndex = '999999';
-                        div.style.borderRadius = '5px';
-                        div.style.fontFamily = 'Arial, sans-serif';
-                        div.style.fontSize = '14px';
-                        div.style.fontWeight = 'bold';
-                        div.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
-                        div.style.border = '2px solid #388E3C';
-                        div.innerHTML = 'CAMPOS PREENCHIDOS AUTOMATICAMENTE!<br><br>' +
-                                    'Usuario e Senha+OTP ja estao preenchidos.<br><br>' +
-                                    'AGORA:<br>' +
-                                    '1. Resolva o CAPTCHA manualmente<br>' +
-                                    '2. Clique no botao Entrar<br><br>' +
-                                    'O sistema vai detectar o login automaticamente...';
-                        document.body.appendChild(div);
+                    try
+                    {
+                        var loginButton = await _page.QuerySelectorAsync(selector);
+                        if (loginButton != null && await loginButton.IsVisibleAsync())
+                        {
+                            Log($"✅ Botão de login encontrado: {selector}");
+                            await loginButton.ClickAsync();
+                            Log("🖱️ Botão 'efetuar login' clicado!");
+                            clicou = true;
+                            break;
+                        }
                     }
-                ");
+                    catch (Exception ex)
+                    {
+                        Log($"⚠️ Erro com seletor {selector}: {ex.Message}");
+                    }
+                }
+                
+                if (!clicou)
+                {
+                    Log("⚠️ Botão de login não encontrado, tentando submeter com Enter...");
+                    await _page.Keyboard.PressAsync("Enter");
+                    Log("⏎ Tecla Enter pressionada");
+                }
                 
                 Log("");
                 Log("=".PadRight(50, '='));
-                Log("✅ PREENCHIMENTO AUTOMÁTICO CONCLUÍDO!");
+                Log("✅ TODOS OS CAMPOS PREENCHIDOS E LOGIN SUBMETIDO!");
                 Log("=".PadRight(50, '='));
-                Log("🔓 AGORA VOCÊ DEVE:");
-                Log("   1. Resolver o CAPTCHA manualmente");
-                Log("   2. Clicar no botão 'Entrar' ou 'Login'");
+                Log("📋 RESUMO DO PREENCHIMENTO:");
+                Log($"   - CAPTCHA: {captchaTexto}");
+                Log($"   - Senha+OTP: {'*' * senhaCompleta.Length}");
+                Log($"   - Usuário: {username}");
                 Log("");
-                Log("⏳ O programa vai aguardar você fazer o login...");
+                Log("⏳ Aguardando resposta do servidor...");
                 Log("=".PadRight(50, '='));
                 
                 return true;
@@ -855,71 +963,6 @@ namespace CadastroProducaoCRE.Services
             }
         }
     
-        public async Task<bool> IniciarNavegadorComSessao(string urlLogin, string urlIndex = "")
-        {
-            try
-            {
-                if (!File.Exists(SESSION_FILE))
-                {
-                    Log("ℹ️ Nenhuma sessão salva encontrada");
-                    return false;
-                }
-                
-                var fileInfo = new FileInfo(SESSION_FILE);
-                if (fileInfo.Length < 100)
-                {
-                    Log("⚠️ Arquivo de sessão corrompido ou inválido");
-                    return false;
-                }
-                
-                Log("🔄 Tentando login com sessão salva...");
-                
-                if (!await IniciarNavegador())
-                {
-                    Log("❌ Falha ao iniciar navegador");
-                    return false;
-                }
-                
-                // Acessa a página de login primeiro (para validar a sessão)
-                Log($"🌍 Acessando página de login para validar sessão: {urlLogin}");
-                if (!await AcessarPagina(urlLogin))
-                {
-                    Log("❌ Falha ao acessar página de login");
-                    await FecharNavegador();
-                    return false;
-                }
-                
-                await Task.Delay(3000);
-                
-                // Verifica se a sessão é válida (se já estiver logado, vai redirecionar)
-                if (await VerificarSessaoValida())
-                {
-                    Log("✅ Sessão válida! Login automático realizado.");
-                    _loginRealizado = true;
-                    
-                    // Se tiver urlIndex, navega para ela
-                    if (!string.IsNullOrEmpty(urlIndex))
-                    {
-                        Log($"🌍 Navegando para página de cadastro: {urlIndex}");
-                        await _page!.GotoAsync(urlIndex, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-                        await Task.Delay(3000);
-                        Log("✅ Página de cadastro carregada com sucesso!");
-                    }
-                    return true;
-                }
-                
-                Log("⚠️ Sessão inválida ou expirada");
-                await FecharNavegador();
-                return false;
-            }
-            catch (Exception ex)
-            {
-                Log($"❌ Erro ao tentar login com sessão: {ex.Message}");
-                await FecharNavegador();
-                return false;
-            }
-        }
-
         public async Task<bool> IniciarNavegadorComLogin(string urlLogin, string urlIndex, string username, string password, string otp)
         {
             try
@@ -976,72 +1019,123 @@ namespace CadastroProducaoCRE.Services
         {
             try
             {
-                // 1. Inicia navegador
+                // 1. Verificar se já existe sessão salva
+                Log("🔍 Verificando sessão salva...");
+                
+                if (File.Exists(SESSION_FILE))
+                {
+                    Log("📂 Sessão encontrada. Tentando carregar...");
+                    
+                    // Inicia navegador com sessão
+                    if (await IniciarNavegadorComSessao(urlLogin, urlIndex))
+                    {
+                        Log("✅ Login automático com sessão salva realizado com sucesso!");
+                        return true;
+                    }
+                    else
+                    {
+                        Log("⚠️ Sessão expirada ou inválida. Será necessário novo login.");
+                    }
+                }
+                
+                // 2. Se não tem sessão ou sessão inválida, faz login completo
+                Log("🔄 Realizando login completo...");
+                
+                // Inicia navegador
                 if (!await IniciarNavegador())
                 {
                     Log("❌ Falha ao iniciar navegador");
                     return false;
                 }
                 
-                // 2. Tenta acessar diretamente a página do CRE (se estiver logado, vai direto)
-                Log($"🌍 Tentando acessar: {urlIndex}");
-                await _page!.GotoAsync(urlIndex, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-                await Task.Delay(5000);
-                
-                var currentUrl = _page.Url;
-                Log($"📍 URL atual: {currentUrl}");
-                
-                // 3. Verifica se já está na página do CRE (logado)
-                if (currentUrl.Contains("cre.oi.net.br/CRE_NEW/CadastroProducao"))
-                {
-                    Log("✅ Já está logado! Página de cadastro acessada diretamente.");
-                    return true;
-                }
-                
-                // 4. Se não está logado, vai para página de login
-                Log("⚠️ Não está logado. Redirecionando para página de login...");
-                await _page.GotoAsync(urlLogin, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+                // Vai para página de login
+                Log($"🌍 Acessando página de login: {urlLogin}");
+                await _page!.GotoAsync(urlLogin, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
                 await Task.Delay(3000);
                 
-                // 5. Preenche os campos (NÃO clica no botão)
-                if (!await PreencherCamposLogin(username, password, otp))
-                {
-                    Log("❌ Falha ao preencher campos");
-                    return false;
-                }
+                // Loop de tentativas de login
+                var maxTentativas = 3;
+                var tentativaAtual = 0;
+                var otpAtual = otp;
+                bool loginSucesso = false;
                 
-                // 6. Aguarda usuário resolver CAPTCHA e clicar manualmente
-                Log("⏳ Aguardando usuário resolver CAPTCHA e clicar em Entrar...");
-                
-                if (await AguardarLoginManual(120))
+                while (tentativaAtual < maxTentativas && !loginSucesso)
                 {
-                    Log("✅ Login detectado!");
-                    await SalvarSessao();
+                    tentativaAtual++;
+                    Log($"📌 Tentativa {tentativaAtual} de {maxTentativas}");
                     
-                    // 7. Verifica se está na página correta
-                    if (!_page.Url.Contains("cre.oi.net.br/CRE_NEW/CadastroProducao"))
+                    // Se não for a primeira tentativa, recarrega a página e pede novo OTP
+                    if (tentativaAtual > 1)
                     {
+                        Log("🔄 Recarregando página para nova tentativa...");
+                        await _page.ReloadAsync();
+                        await Task.Delay(3000);
+                        
+                        // Pede novo OTP
+                        if (OnRequisitarNovoOTP != null)
+                        {
+                            var novoOtp = await OnRequisitarNovoOTP.Invoke(tentativaAtual);
+                            if (!string.IsNullOrEmpty(novoOtp) && novoOtp.Length == 6)
+                            {
+                                otpAtual = novoOtp;
+                                Log($"🔐 Novo OTP recebido: {'*' * otpAtual.Length}");
+                            }
+                            else
+                            {
+                                Log("❌ Novo OTP não fornecido!");
+                                return false;
+                            }
+                        }
+                    }
+                    
+                    // Preenche os campos (sem clicar no botão)
+                    if (!await PreencherCamposLogin(username, password, otpAtual))
+                    {
+                        Log("❌ Falha ao preencher campos");
+                        continue;
+                    }
+                    
+                    // Aguarda o usuário clicar manualmente em Entrar
+                    Log("⏳ Aguardando usuário clicar em Entrar...");
+                    
+                    // Aguarda o login ser detectado ou aparecer mensagem de erro
+                    var resultado = await AguardarLoginOuErro(60);
+                    
+                    if (resultado == LoginResult.Sucesso)
+                    {
+                        Log("✅ Login detectado com sucesso!");
+                        loginSucesso = true;
+                        
+                        // Salva a sessão
+                        await SalvarSessao();
+                        Log("💾 Sessão salva com sucesso!");
+                        
+                        // Navega para página de cadastro
                         Log($"🌍 Navegando para página de cadastro: {urlIndex}");
                         await _page.GotoAsync(urlIndex, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
                         await Task.Delay(3000);
                     }
-                    
-                    return true;
-                }
-                
-                // 8. Se chegou aqui, perguntar se quer tentar novamente com novo OTP
-                if (OnRequisitarNovoOTP != null)
-                {
-                    var novoOtp = await OnRequisitarNovoOTP.Invoke(1);
-                    if (!string.IsNullOrEmpty(novoOtp) && novoOtp.Length == 6)
+                    else if (resultado == LoginResult.Erro)
                     {
-                        Log($"🔄 Tentando novamente com novo OTP...");
-                        return await IniciarNavegadorEFazerLogin(urlIndex, urlLogin, username, password, novoOtp);
+                        Log("⚠️ Erro no login! Verifique suas credenciais.");
+                        
+                        if (tentativaAtual >= maxTentativas)
+                        {
+                            Log($"❌ Número máximo de tentativas ({maxTentativas}) atingido!");
+                            return false;
+                        }
+                        
+                        Log("🔄 Nova tentativa será iniciada...");
+                        continue;
+                    }
+                    else // Timeout
+                    {
+                        Log("❌ Timeout - Login não detectado");
+                        return false;
                     }
                 }
                 
-                Log("❌ Login não detectado dentro do tempo limite!");
-                return false;
+                return loginSucesso;
             }
             catch (Exception ex)
             {
@@ -1049,6 +1143,255 @@ namespace CadastroProducaoCRE.Services
                 return false;
             }
         }
-        public IPage? GetPage() => _page;
+
+        private enum LoginResult
+        {
+            Aguardando,
+            Sucesso,
+            Erro,
+            Timeout
+        }
+
+        private async Task<LoginResult> AguardarLoginOuErro(int timeoutSegundos = 60)
+        {
+            var timeoutInicial = DateTime.Now;
+            
+            while ((DateTime.Now - timeoutInicial).TotalSeconds < timeoutSegundos)
+            {
+                try
+                {
+                    if (_page == null) continue;
+                    
+                    // Verifica se apareceu mensagem de erro
+                    var errorElement = await _page.QuerySelectorAsync(".p-error, .alert-danger, div:has-text('Ops, não encontramos seu usuário ou senha')");
+                    if (errorElement != null && await errorElement.IsVisibleAsync())
+                    {
+                        var errorText = await errorElement.TextContentAsync();
+                        Log($"❌ Erro detectado: {errorText?.Trim()}");
+                        return LoginResult.Erro;
+                    }
+                    
+                    // Verifica se o login foi bem sucedido (elemento do usuário)
+                    var userLabel = await _page.QuerySelectorAsync("label:has-text(\"Usuário:\")");
+                    if (userLabel != null && await userLabel.IsVisibleAsync())
+                    {
+                        var userText = await userLabel.TextContentAsync();
+                        if (!string.IsNullOrEmpty(userText) && userText.Contains("TR"))
+                        {
+                            Log($"✅ Login detectado! {userText.Trim()}");
+                            return LoginResult.Sucesso;
+                        }
+                    }
+                    
+                    // Verifica se a URL mudou para o CRE
+                    var currentUrl = _page.Url;
+                    if (currentUrl.Contains("cre.oi.net.br") && !currentUrl.Contains("login"))
+                    {
+                        Log($"✅ Redirecionamento detectado: {currentUrl}");
+                        return LoginResult.Sucesso;
+                    }
+                }
+                catch { }
+                
+                await Task.Delay(1000);
+            }
+            
+            return LoginResult.Timeout;
+        }
+
+    public async Task<bool> IniciarNavegadorComSessao(string urlLogin, string urlIndex)
+    {
+        try
+        {
+            if (!File.Exists(SESSION_FILE))
+            {
+                Log("ℹ️ Nenhuma sessão salva encontrada");
+                return false;
+            }
+            
+            var fileInfo = new FileInfo(SESSION_FILE);
+            if (fileInfo.Length < 100)
+            {
+                Log("⚠️ Arquivo de sessão corrompido");
+                return false;
+            }
+            
+            Log("🔄 Carregando sessão salva...");
+            
+            // Carrega a sessão
+            var storageState = await File.ReadAllTextAsync(SESSION_FILE);
+            
+            // Inicia navegador com a sessão
+            if (!await IniciarNavegador())
+            {
+                Log("❌ Falha ao iniciar navegador");
+                return false;
+            }
+            
+            // Recria o contexto com a sessão
+            await _context!.CloseAsync();
+            
+            var contextoConfig = new BrowserNewContextOptions
+            {
+                ViewportSize = new ViewportSize { Width = 800, Height = 600 },
+                UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                IgnoreHTTPSErrors = true,
+                StorageState = storageState
+            };
+            
+            _context = await _browser!.NewContextAsync(contextoConfig);
+            _page = await _context.NewPageAsync();
+            
+            // Tenta acessar diretamente a página do CRE
+            Log($"🌍 Tentando acessar: {urlIndex}");
+            await _page.GotoAsync(urlIndex, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+            await Task.Delay(5000);
+            
+            var currentUrl = _page.Url;
+            Log($"📍 URL atual: {currentUrl}");
+            
+            // Verifica se está logado
+            if (currentUrl.Contains("cre.oi.net.br") && !currentUrl.Contains("login"))
+            {
+                Log("✅ Sessão válida! Acessou diretamente.");
+                
+                // Verifica elemento do usuário
+                var userLabel = await _page.QuerySelectorAsync("label:has-text(\"Usuário:\")");
+                if (userLabel != null)
+                {
+                    var userText = await userLabel.TextContentAsync();
+                    Log($"👤 Usuário logado: {userText?.Trim()}");
+                }
+                
+                return true;
+            }
+            
+            // Verifica se ainda está na página de login (sessão inválida)
+            if (currentUrl.Contains("oilogin.oi.net.br") || currentUrl.Contains("login"))
+            {
+                Log("⚠️ Sessão inválida ou expirada");
+                await FecharNavegador();
+                return false;
+            }
+            
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log($"❌ Erro ao carregar sessão: {ex.Message}");
+            await FecharNavegador();
+            return false;
+        }
+    }
+        public async Task<byte[]> CapturarCaptcha()
+        {
+            try
+            {
+                if (_page == null) return null;
+                
+                // Procura pela imagem do CAPTCHA (geralmente perto do campo)
+                var captchaSelectors = new[]
+                {
+                    "img[src*='captcha']",
+                    "img[src*='Captcha']",
+                    "img[src*='verificacao']",
+                    "img[alt*='captcha']",
+                    "#captchaImg",
+                    ".captcha-img",
+                    "div[id*='captcha'] img",
+                    "div[class*='captcha'] img"
+                };
+                
+                foreach (var selector in captchaSelectors)
+                {
+                    try
+                    {
+                        var elemento = await _page.QuerySelectorAsync(selector);
+                        if (elemento != null && await elemento.IsVisibleAsync())
+                        {
+                            Log($"✅ Imagem CAPTCHA encontrada com seletor: {selector}");
+                            var screenshot = await elemento.ScreenshotAsync();
+                            return screenshot;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"⚠️ Erro com seletor {selector}: {ex.Message}");
+                    }
+                }
+                
+                // Se não encontrou imagem específica, tenta capturar a área ao redor do campo
+                var captchaField = await _page.QuerySelectorAsync("#textVerificacao");
+                if (captchaField != null)
+                {
+                    // Tenta encontrar a imagem do CAPTCHA próxima ao campo
+                    var parentDiv = await captchaField.EvaluateAsync<string>("el => el.closest('div')?.id || ''");
+                    if (!string.IsNullOrEmpty(parentDiv))
+                    {
+                        var parentElement = await _page.QuerySelectorAsync($"#{parentDiv}");
+                        if (parentElement != null)
+                        {
+                            var screenshot = await parentElement.ScreenshotAsync();
+                            return screenshot;
+                        }
+                    }
+                }
+                
+                // Fallback: captura a tela inteira
+                Log("⚠️ Imagem CAPTCHA não encontrada, capturando tela inteira...");
+                var screenshotFull = await _page.ScreenshotAsync();
+                return screenshotFull;
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Erro ao capturar CAPTCHA: {ex.Message}");
+                return null;
+            }
+        }
+        
+        public async Task RecarregarCaptcha()
+        {
+            try
+            {
+                if (_page == null) return;
+                
+                // Tenta encontrar o botão de refresh do CAPTCHA
+                var refreshSelectors = new[]
+                {
+                    "button:has-text('refresh')",
+                    "button:has-text('Refresh')",
+                    "button:has-text('Atualizar')",
+                    "button:has-text('Novo')",
+                    "img[alt*='refresh']",
+                    "a[onclick*='refresh']",
+                    "a[href*='refresh']"
+                };
+                
+                foreach (var selector in refreshSelectors)
+                {
+                    try
+                    {
+                        var btnRefresh = await _page.QuerySelectorAsync(selector);
+                        if (btnRefresh != null && await btnRefresh.IsVisibleAsync())
+                        {
+                            await btnRefresh.ClickAsync();
+                            Log("🔄 CAPTCHA atualizado via botão de refresh!");
+                            await Task.Delay(1500);
+                            return;
+                        }
+                    }
+                    catch { }
+                }
+                
+                // Se não encontrou botão, recarrega a página
+                Log("🔄 Recarregando página para novo CAPTCHA...");
+                await _page.ReloadAsync();
+                await Task.Delay(2000);
+            }
+            catch (Exception ex)
+            {
+                Log($"⚠️ Erro ao recarregar CAPTCHA: {ex.Message}");
+            }
+        }
     }
 }
