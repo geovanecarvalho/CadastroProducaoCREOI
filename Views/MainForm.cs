@@ -715,134 +715,167 @@ namespace CadastroProducaoCRE.Views
             SalvarConfiguracoes();
         }
 
-
-    private async Task ProcessarPlanilha(string caminhoArquivo)
-    {
-        try
+        private async Task ProcessarPlanilha(string caminhoArquivo)
         {
-            var excelService = new ExcelService(AdicionarLog);
-            var scraperService = new ScraperService(_playwright.GetPage(), AdicionarLog);
-            
-            AdicionarLog("📊 Iniciando leitura da planilha...");
-            var registros = await excelService.LerPlanilha(caminhoArquivo);
-            
-            if (registros.Count == 0)
+            try
             {
-                AdicionarLog("⚠️ Nenhum registro encontrado na planilha");
-                return;
-            }
-            
-            AdicionarLog($"📋 {registros.Count} registros carregados para processamento");
-            
-            var total = registros.Count;
-            var processados = 0;
-            
-            // Garantir que está na página de cadastro
-            if (!await scraperService.AcessarPaginaCadastro())
-            {
-                AdicionarLog("❌ Não foi possível acessar a página de cadastro");
-                return;
-            }
-            
-            foreach (var registro in registros)
-            {
-                if (!_isRunning)
+                var excelService = new ExcelService(AdicionarLog);
+                
+                AdicionarLog("📊 Iniciando leitura da planilha...");
+                var registros = await excelService.LerPlanilha(caminhoArquivo);
+                
+                // ========== VALIDAÇÃO: SE NÃO HÁ REGISTROS, INTERROMPE ==========
+                if (registros == null || registros.Count == 0)
                 {
-                    AdicionarLog("⏹️ Processamento interrompido pelo usuário");
-                    break;
+                    AdicionarLog("❌ Processamento cancelado devido a erros na planilha");
+                    AdicionarLog("⚠️ Verifique o formato dos números decimais (use ponto . no lugar da vírgula ,)");
+                    FinalizarExecucao(false);
+                    return;
                 }
                 
-                var resultado = await scraperService.ProcessarRegistro(registro);
-                processados++;
+                AdicionarLog($"📋 {registros.Count} registros carregados para processamento");
                 
-                AtualizarProgresso(processados, total);
-            }
-            
-            AdicionarLog("");
-            AdicionarLog("=".PadRight(50, '='));
-            AdicionarLog("📊 RESUMO DO PROCESSAMENTO");
-            AdicionarLog("=".PadRight(50, '='));
-            
-            var sucessos = registros.Count(r => r.Status == "Sucesso");
-            var erros = registros.Count(r => r.Status == "Erro");
-            
-            AdicionarLog($"✅ Processados: {processados}/{total}");
-            AdicionarLog($"✅ Sucessos: {sucessos}");
-            AdicionarLog($"❌ Erros: {erros}");
-            
-            // Gerar relatório
-            AdicionarLog("");
-            AdicionarLog("💾 Gerando relatório...");
-            var caminhoRelatorio = await excelService.GerarRelatorio(registros);
-            
-            // ========== FECHAR O NAVEGADOR ==========
-            AdicionarLog("🔒 Fechando navegador...");
-            if (_playwright != null)
-            {
-                await _playwright.FecharNavegador();
-                AdicionarLog("✅ Navegador fechado com sucesso!");
-            }
-            
-            // ========== MENSAGEM PARA LOCALIZAR O ARQUIVO ==========
-            if (!string.IsNullOrEmpty(caminhoRelatorio) && File.Exists(caminhoRelatorio))
-            {
-                // Mostra mensagem de sucesso com opção de abrir a pasta
-                var result = MessageBox.Show(
-                    $"✅ PROCESSAMENTO FINALIZADO!\n\n" +
-                    $"📊 Resumo:\n" +
-                    $"   - Total de registros: {total}\n" +
-                    $"   - Sucessos: {sucessos}\n" +
-                    $"   - Erros: {erros}\n\n" +
-                    $"📁 Relatório salvo em:\n{caminhoRelatorio}\n\n" +
-                    $"Deseja abrir a pasta onde o arquivo está localizado?",
-                    "Processamento Concluído",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Information);
-                
-                if (result == DialogResult.Yes)
+                // ========== VALIDAÇÃO: VERIFICAR SE TODAS AS QUANTIDADES SÃO VÁLIDAS ==========
+                var errosQuantidade = new List<string>();
+                for (int i = 0; i < registros.Count; i++)
                 {
-                    // Abre a pasta e seleciona o arquivo
-                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{caminhoRelatorio}\"");
+                    var reg = registros[i];
+                    if (reg.Quantidade <= 0)
+                    {
+                        errosQuantidade.Add($"Linha {i + 2}: Código {reg.Codigo} - Quantidade inválida: {reg.Quantidade}");
+                    }
                 }
                 
-                AdicionarLog($"📁 Relatório: {caminhoRelatorio}");
+                if (errosQuantidade.Count > 0)
+                {
+                    var mensagemErro = "❌ ERRO: Quantidades inválidas encontradas!\n\n" +
+                                    "Os seguintes registros têm problemas na quantidade:\n" +
+                                    string.Join("\n", errosQuantidade) + "\n\n" +
+                                    "✅ SOLUÇÃO: Verifique se os números decimais estão usando ponto (.) em vez de vírgula (,)\n" +
+                                    "Exemplo correto: 412.50\n\n" +
+                                    "Corrija a planilha e tente novamente.";
+                    
+                    MessageBox.Show(mensagemErro, "Erro de Validação", 
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    
+                    AdicionarLog("❌ Processamento cancelado - Quantidades inválidas");
+                    FinalizarExecucao(false);
+                    return;
+                }
+                
+                var scraperService = new ScraperService(_playwright.GetPage(), AdicionarLog);
+                
+                var total = registros.Count;
+                var processados = 0;
+                
+                // Garantir que está na página de cadastro
+                if (!await scraperService.AcessarPaginaCadastro())
+                {
+                    AdicionarLog("❌ Não foi possível acessar a página de cadastro");
+                    FinalizarExecucao(false);
+                    return;
+                }
+                
+                foreach (var registro in registros)
+                {
+                    if (!_isRunning)
+                    {
+                        AdicionarLog("⏹️ Processamento interrompido pelo usuário");
+                        break;
+                    }
+                    
+                    AdicionarLog($"📌 Processando: DC={registro.DC}, Sequencial={registro.Sequencial}, Código={registro.Codigo}, Quantidade={registro.Quantidade}");
+                    
+                    var resultado = await scraperService.ProcessarRegistro(registro);
+                    processados++;
+                    
+                    AtualizarProgresso(processados, total);
+                }
+                
+                AdicionarLog("");
+                AdicionarLog("=".PadRight(50, '='));
+                AdicionarLog("📊 RESUMO DO PROCESSAMENTO");
+                AdicionarLog("=".PadRight(50, '='));
+                
+                var sucessos = registros.Count(r => r.Status == "Sucesso");
+                var erros = registros.Count(r => r.Status == "Erro");
+                
+                AdicionarLog($"✅ Processados: {processados}/{total}");
+                AdicionarLog($"✅ Sucessos: {sucessos}");
+                AdicionarLog($"❌ Erros: {erros}");
+                
+                // Gerar relatório
+                AdicionarLog("");
+                AdicionarLog("💾 Gerando relatório...");
+                var caminhoRelatorio = await excelService.GerarRelatorio(registros);
+                
+                // ========== FECHAR O NAVEGADOR ==========
+                AdicionarLog("🔒 Fechando navegador...");
+                if (_playwright != null)
+                {
+                    await _playwright.FecharNavegador();
+                    AdicionarLog("✅ Navegador fechado com sucesso!");
+                }
+                
+                // ========== MENSAGEM PARA LOCALIZAR O ARQUIVO ==========
+                if (!string.IsNullOrEmpty(caminhoRelatorio) && File.Exists(caminhoRelatorio))
+                {
+                    var result = MessageBox.Show(
+                        $"✅ PROCESSAMENTO FINALIZADO!\n\n" +
+                        $"📊 Resumo:\n" +
+                        $"   - Total de registros: {total}\n" +
+                        $"   - Sucessos: {sucessos}\n" +
+                        $"   - Erros: {erros}\n\n" +
+                        $"📁 Relatório salvo em:\n{caminhoRelatorio}\n\n" +
+                        $"Deseja abrir a pasta onde o arquivo está localizado?",
+                        "Processamento Concluído",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Information);
+                    
+                    if (result == DialogResult.Yes)
+                    {
+                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{caminhoRelatorio}\"");
+                    }
+                    
+                    AdicionarLog($"📁 Relatório: {caminhoRelatorio}");
+                }
+                else
+                {
+                    MessageBox.Show(
+                        $"✅ PROCESSAMENTO FINALIZADO!\n\n" +
+                        $"📊 Resumo:\n" +
+                        $"   - Total de registros: {total}\n" +
+                        $"   - Sucessos: {sucessos}\n" +
+                        $"   - Erros: {erros}\n\n" +
+                        $"⚠️ Não foi possível gerar o relatório.",
+                        "Processamento Concluído",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+                
+                // Finalizar execução (reativar botões)
+                FinalizarExecucao(true);
             }
-            else
+            catch (Exception ex)
             {
+                AdicionarLog($"❌ Erro ao processar planilha: {ex.Message}");
+                
+                // Tentar fechar navegador mesmo em caso de erro
+                if (_playwright != null)
+                {
+                    await _playwright.FecharNavegador();
+                }
+                
                 MessageBox.Show(
-                    $"✅ PROCESSAMENTO FINALIZADO!\n\n" +
-                    $"📊 Resumo:\n" +
-                    $"   - Total de registros: {total}\n" +
-                    $"   - Sucessos: {sucessos}\n" +
-                    $"   - Erros: {erros}\n\n" +
-                    $"⚠️ Não foi possível gerar o relatório.",
-                    "Processamento Concluído",
+                    $"❌ Erro durante o processamento!\n\n{ex.Message}",
+                    "Erro",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    MessageBoxIcon.Error);
+                
+                FinalizarExecucao(false);
             }
-            
-            // Finalizar execução (reativar botões)
-            FinalizarExecucao(true);
         }
-        catch (Exception ex)
-        {
-            AdicionarLog($"❌ Erro ao processar planilha: {ex.Message}");
-            
-            // Tentar fechar navegador mesmo em caso de erro
-            if (_playwright != null)
-            {
-                await _playwright.FecharNavegador();
-            }
-            
-            MessageBox.Show(
-                $"❌ Erro durante o processamento!\n\n{ex.Message}",
-                "Erro",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-            
-            FinalizarExecucao(false);
-        }
-    }    
+
 
     }
 }

@@ -142,7 +142,8 @@ namespace CadastroProducaoCRE.Services
                 _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
                 {
                     Headless = _headless,
-                    Args = args
+                    Args = args,
+                    SlowMo = 0  // Desabilitar SlowMo
                 });
                 
                 // Criar contexto com configurações realistas

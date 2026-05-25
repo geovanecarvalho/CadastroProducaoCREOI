@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Globalization;
 
 namespace CadastroProducaoCRE.Services
 {
@@ -11,6 +12,14 @@ namespace CadastroProducaoCRE.Services
     {
         private readonly IPage _page;
         private readonly Action<string> _log;
+        
+        // Mapeamento de natureza - definido uma vez no início da classe
+        private static readonly Dictionary<string, string> NaturezaMap = new Dictionary<string, string>
+        {
+            { "Retirada", "RE" },
+            { "Instalação", "IN" },
+            { "Furto", "FU" }
+        };
         
         public ScraperService(IPage page, Action<string> logCallback)
         {
@@ -30,14 +39,14 @@ namespace CadastroProducaoCRE.Services
             {
                 var url = "https://cre.oi.net.br/CRE_NEW/CadastroProducao/Index";
                 Log($"🌍 Acessando: {url}");
-                await _page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-                await Task.Delay(3000);
-                Log("✅ Página de cadastro carregada");
+                await _page.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+                await Task.Delay(500);
+                Log("✅ Página carregada");
                 return true;
             }
             catch (Exception ex)
             {
-                Log($"❌ Erro ao acessar página: {ex.Message}");
+                Log($"❌ Erro: {ex.Message}");
                 return false;
             }
         }
@@ -56,7 +65,6 @@ namespace CadastroProducaoCRE.Services
                     await dcField.PressAsync("Control+A");
                     await dcField.PressAsync("Delete");
                     await dcField.FillAsync(dc);
-                    Log($"✅ DC preenchida: {dc}");
                 }
                 
                 var seqField = await _page.QuerySelectorAsync("#Sequencial");
@@ -66,15 +74,13 @@ namespace CadastroProducaoCRE.Services
                     await seqField.PressAsync("Control+A");
                     await seqField.PressAsync("Delete");
                     await seqField.FillAsync(sequencial);
-                    Log($"✅ Sequencial preenchido: {sequencial}");
                 }
                 
                 var btnBuscar = await _page.QuerySelectorAsync("#btnBusca");
                 if (btnBuscar != null)
                 {
                     await btnBuscar.ClickAsync();
-                    Log("🔍 Botão Pesquisar clicado");
-                    await Task.Delay(3000);
+                    await Task.Delay(500);
                     return true;
                 }
                 
@@ -82,7 +88,7 @@ namespace CadastroProducaoCRE.Services
             }
             catch (Exception ex)
             {
-                Log($"❌ Erro ao pesquisar: {ex.Message}");
+                Log($"❌ Erro: {ex.Message}");
                 return false;
             }
         }
@@ -92,26 +98,19 @@ namespace CadastroProducaoCRE.Services
         {
             try
             {
-                Log($"📝 Preenchendo recursos - Recurso: {recurso}, Fornecimento: {fornecimento}, Contrato: {contrato}");
-                
-                // Recurso
                 var recursoValue = recurso == "Material" ? "MT" : "SR";
                 await _page.SelectOptionAsync("#ddlTipoRecurso", recursoValue);
                 
-                // Fornecimento
                 var fornecimentoValue = fornecimento == "Oi" ? "P" : "T";
                 await _page.SelectOptionAsync("#ddlOrigemFornecimento", fornecimentoValue);
                 
-                // Contrato
                 await _page.SelectOptionAsync("#ddlModeloRecurso", contrato);
                 
-                // Confirmar recursos
                 var btnConfirmar = await _page.QuerySelectorAsync("button:has-text('Confirmar Recursos')");
                 if (btnConfirmar != null)
                 {
                     await btnConfirmar.ClickAsync();
-                    Log("✅ Recursos confirmados");
-                    await Task.Delay(2000);
+                    await Task.Delay(300);
                     return true;
                 }
                 
@@ -119,49 +118,49 @@ namespace CadastroProducaoCRE.Services
             }
             catch (Exception ex)
             {
-                Log($"❌ Erro ao preencher recursos: {ex.Message}");
+                Log($"❌ Erro: {ex.Message}");
                 return false;
             }
         }
         
-        // 4. Verificar se código existe na tabela
+        // 4. Verificar código existe
         public async Task<bool> VerificarCodigoExiste(string codigo)
         {
             try
             {
                 var codigoBusca = codigo.Trim();
-                Log($"🔍 Verificando se código {codigoBusca} existe...");
                 
-                await Task.Delay(1000);
-                
-                var celulas = await _page.QuerySelectorAllAsync("td");
-                foreach (var celula in celulas)
-                {
-                    var texto = await celula.TextContentAsync();
-                    if (!string.IsNullOrEmpty(texto) && texto.Contains(codigoBusca))
-                    {
-                        Log($"✅ Código {codigoBusca} encontrado!");
-                        return true;
+                var existe = await _page.EvaluateAsync<bool>(@"
+                    (codigo) => {
+                        const cells = document.querySelectorAll('td');
+                        for (let cell of cells) {
+                            if (cell.textContent && cell.textContent.includes(codigo)) {
+                                return true;
+                            }
+                        }
+                        return false;
                     }
-                }
+                ", codigoBusca);
                 
-                Log($"❌ Código {codigoBusca} não encontrado");
-                return false;
+                if (existe)
+                    Log($"✅ Código {codigoBusca} encontrado!");
+                else
+                    Log($"❌ Código {codigoBusca} não encontrado");
+                
+                return existe;
             }
             catch (Exception ex)
             {
-                Log($"⚠️ Erro ao verificar código: {ex.Message}");
+                Log($"⚠️ Erro: {ex.Message}");
                 return false;
             }
         }
         
-        // 5. Clicar no botão Novo para o código
+        // 5. Clicar em Novo
         public async Task<bool> ClicarNovo(string codigo)
         {
             try
             {
-                Log($"🔘 Clicando em Novo para o código: {codigo}");
-                
                 var botoesNovo = await _page.QuerySelectorAllAsync("input[value='Novo']");
                 foreach (var btn in botoesNovo)
                 {
@@ -169,18 +168,15 @@ namespace CadastroProducaoCRE.Services
                     if (!string.IsNullOrEmpty(onclick) && onclick.Contains(codigo))
                     {
                         await btn.ClickAsync();
-                        Log($"✅ Botão Novo clicado para {codigo}");
-                        await Task.Delay(2000);
+                        await Task.Delay(300);
                         return true;
                     }
                 }
-                
-                Log($"❌ Botão Novo para {codigo} não encontrado");
                 return false;
             }
             catch (Exception ex)
             {
-                Log($"❌ Erro ao clicar em Novo: {ex.Message}");
+                Log($"❌ Erro: {ex.Message}");
                 return false;
             }
         }
@@ -190,7 +186,10 @@ namespace CadastroProducaoCRE.Services
         {
             try
             {
-                Log($"📝 Inserindo quantidade: {quantidade}");
+                // Usa CultureInfo.InvariantCulture para garantir o ponto decimal
+                var quantidadeStr = quantidade.ToString(CultureInfo.InvariantCulture);
+                
+                Log($"📝 Inserindo quantidade: {quantidade} -> '{quantidadeStr}'");
                 
                 var campo = await _page.QuerySelectorAsync("#Quantidade");
                 if (campo != null)
@@ -198,11 +197,14 @@ namespace CadastroProducaoCRE.Services
                     await campo.ClickAsync();
                     await campo.PressAsync("Control+A");
                     await campo.PressAsync("Delete");
-                    await campo.FillAsync(quantidade.ToString().Replace(",", "."));
-                    Log($"✅ Quantidade {quantidade} inserida");
+                    await campo.FillAsync(quantidadeStr);
+                    
+                    // Verifica o valor após preenchimento
+                    var valorPreenchido = await campo.InputValueAsync();
+                    Log($"📝 Valor após preenchimento: {valorPreenchido}");
+                    
                     return true;
                 }
-                
                 return false;
             }
             catch (Exception ex)
@@ -217,9 +219,7 @@ namespace CadastroProducaoCRE.Services
         {
             try
             {
-                Log($"📝 Selecionando equipe: {equipe}");
                 await _page.SelectOptionAsync("#IdEquipeContratada", equipe);
-                Log($"✅ Equipe {equipe} selecionada");
                 return true;
             }
             catch (Exception ex)
@@ -234,18 +234,8 @@ namespace CadastroProducaoCRE.Services
         {
             try
             {
-                Log($"📝 Selecionando natureza: {natureza}");
-                
-                var naturezaMap = new Dictionary<string, string>
-                {
-                    { "Retirada", "RE" },
-                    { "Instalação", "IN" },
-                    { "Furto", "FU" }
-                };
-                
-                var valor = naturezaMap.ContainsKey(natureza) ? naturezaMap[natureza] : natureza;
+                var valor = NaturezaMap.ContainsKey(natureza) ? NaturezaMap[natureza] : natureza;
                 await _page.SelectOptionAsync("#NaturezaProducao", valor);
-                Log($"✅ Natureza {natureza} selecionada");
                 return true;
             }
             catch (Exception ex)
@@ -256,123 +246,90 @@ namespace CadastroProducaoCRE.Services
         }
         
         // 9. Clicar em Salvar
-        public async Task<(bool sucesso, string mensagem)> ClicarSalvar(string codigo)
+        public async Task<bool> ClicarSalvar()
         {
             try
             {
-                Log($"💾 Clicando em Salvar para {codigo}");
-                
                 var btnSalvar = await _page.QuerySelectorAsync("#btnSalvar");
                 if (btnSalvar != null)
                 {
                     await btnSalvar.ClickAsync();
-                    Log("✅ Botão Salvar clicado");
-                    await Task.Delay(3000);
-                    
-                    // Verificar mensagem de sucesso
-                    var alertaSucesso = await _page.QuerySelectorAsync(".alert-success");
-                    if (alertaSucesso != null && await alertaSucesso.IsVisibleAsync())
-                    {
-                        var mensagem = await alertaSucesso.TextContentAsync();
-                        Log($"✅ Sucesso: {mensagem?.Trim()}");
-                        return (true, mensagem?.Trim() ?? "Salvo com sucesso");
-                    }
-                    
-                    return (true, "Salvo com sucesso");
+                    await Task.Delay(500);
+                    return true;
                 }
-                
-                return (false, "Botão Salvar não encontrado");
+                return false;
             }
             catch (Exception ex)
             {
                 Log($"❌ Erro ao salvar: {ex.Message}");
-                return (false, ex.Message);
-            }
-        }
-        
-        // 10. Clicar em Sair
-        public async Task<bool> ClicarSair()
-        {
-            try
-            {
-                var btnSair = await _page.QuerySelectorAsync("#btnVoltar");
-                if (btnSair != null)
-                {
-                    await btnSair.ClickAsync();
-                    Log("🔒 Botão Sair clicado");
-                    await Task.Delay(2000);
-                    return true;
-                }
-                return false;
-            }
-            catch (Exception ex)
-            {
-                Log($"⚠️ Erro ao clicar em Sair: {ex.Message}");
                 return false;
             }
         }
         
-        // 11. Inserir Item Não Orçado
+        // 10. Inserir Item Não Orçado
         public async Task<bool> InserirItemNaoOrcado(string codigo)
         {
             try
             {
-                Log($"📌 Inserindo Item Não Orçado para: {codigo}");
-                
                 var btnInserir = await _page.QuerySelectorAsync("#btnInserirRecurso");
                 if (btnInserir != null)
                 {
                     await btnInserir.ClickAsync();
-                    Log("✅ Botão Inserir Item Não Orçado clicado");
-                    await Task.Delay(2000);
+                    await Task.Delay(500);
                     
-                    // Inserir código
                     var campoParam2 = await _page.QuerySelectorAsync("#param2");
                     if (campoParam2 != null)
                     {
                         await campoParam2.FillAsync(codigo);
-                        Log($"✅ Código {codigo} inserido");
+                        
+                        var btnFiltrar = await _page.QuerySelectorAsync("#btnFiltrar");
+                        if (btnFiltrar != null)
+                        {
+                            await btnFiltrar.ClickAsync();
+                            await Task.Delay(500);
+                            
+                            var radio = await _page.QuerySelectorAsync($"input[value='{codigo}']");
+                            if (radio != null)
+                            {
+                                await radio.ClickAsync();
+                                
+                                var btnConfirmar = await _page.QuerySelectorAsync("#btnConfirmar");
+                                if (btnConfirmar != null)
+                                {
+                                    await btnConfirmar.ClickAsync();
+                                    await Task.Delay(500);
+                                    return true;
+                                }
+                            }
+                        }
                     }
-                    
-                    // Filtrar
-                    var btnFiltrar = await _page.QuerySelectorAsync("#btnFiltrar");
-                    if (btnFiltrar != null)
-                    {
-                        await btnFiltrar.ClickAsync();
-                        Log("🔍 Botão Filtrar clicado");
-                        await Task.Delay(2000);
-                    }
-                    
-                    // Selecionar radio
-                    var radio = await _page.QuerySelectorAsync($"input[value='{codigo}']");
-                    if (radio != null)
-                    {
-                        await radio.ClickAsync();
-                        Log($"✅ Radio selecionado para {codigo}");
-                    }
-                    
-                    // Confirmar
-                    var btnConfirmar = await _page.QuerySelectorAsync("#btnConfirmar");
-                    if (btnConfirmar != null)
-                    {
-                        await btnConfirmar.ClickAsync();
-                        Log("✅ Confirmar clicado");
-                        await Task.Delay(2000);
-                    }
-                    
-                    return true;
                 }
-                
                 return false;
             }
             catch (Exception ex)
             {
-                Log($"❌ Erro ao inserir Item Não Orçado: {ex.Message}");
+                Log($"❌ Erro: {ex.Message}");
                 return false;
             }
         }
         
-        // 12. Limpar formulário para próximo registro
+        // 11. Clicar em Sair
+        public async Task<bool> ClicarSair()
+        {
+            try
+            {
+                await _page.ClickAsync("#btnVoltar");
+                await Task.Delay(300);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"⚠️ Erro ao sair: {ex.Message}");
+                return false;
+            }
+        }
+        
+        // 12. Limpar formulário
         public async Task<bool> LimparFormulario()
         {
             try
@@ -381,41 +338,35 @@ namespace CadastroProducaoCRE.Services
                 if (btnLimpar != null && await btnLimpar.IsEnabledAsync())
                 {
                     await btnLimpar.ClickAsync();
-                    Log("🧹 Formulário limpo");
-                    await Task.Delay(2000);
+                    await Task.Delay(300);
                 }
                 return true;
             }
             catch (Exception ex)
             {
-                Log($"⚠️ Erro ao limpar formulário: {ex.Message}");
-                return true; // Continua mesmo se não conseguir limpar
+                return true;
             }
         }
         
-        // Método principal para processar um registro
+        // Método principal
         public async Task<RegistroProducao> ProcessarRegistro(RegistroProducao registro)
         {
             var inicio = DateTime.Now;
             registro.DataProcessamento = inicio;
             
-            Log($"🔵 INICIANDO PROCESSAMENTO DO REGISTRO: DC={registro.DC}, Sequencial={registro.Sequencial}");
             try
             {
-                Log("");
-                Log("=".PadRight(50, '='));
                 Log($"📌 Processando: DC={registro.DC}, Sequencial={registro.Sequencial}, Código={registro.Codigo}");
-                Log("=".PadRight(50, '='));
                 
-                // 1. Pesquisar DC e Sequencial
+                // 1. Pesquisar
                 if (!await PesquisarDCSequencial(registro.DC, registro.Sequencial))
                 {
                     registro.Status = "Erro";
-                    registro.Mensagem = "Falha ao pesquisar DC/Sequencial";
+                    registro.Mensagem = "Falha ao pesquisar";
                     return registro;
                 }
                 
-                // 2. Preencher recursos
+                // 2. Recursos
                 if (!await PreencherRecursos(registro.Recurso, registro.Fornecimento, registro.Contrato))
                 {
                     registro.Status = "Erro";
@@ -423,14 +374,12 @@ namespace CadastroProducaoCRE.Services
                     return registro;
                 }
                 
-                // 3. Verificar se código existe
+                // 3. Verificar código
                 var codigoExiste = await VerificarCodigoExiste(registro.Codigo);
                 
                 if (codigoExiste)
                 {
-                    // Código existe - seguir fluxo normal
-                    Log("✅ Código encontrado, seguindo fluxo normal...");
-                    
+                    // Fluxo normal - código já existe
                     if (!await ClicarNovo(registro.Codigo))
                     {
                         registro.Status = "Erro";
@@ -442,23 +391,22 @@ namespace CadastroProducaoCRE.Services
                     await SelecionarEquipe(registro.Equipe);
                     await SelecionarNatureza(registro.Natureza);
                     
-                    var (sucesso, mensagem) = await ClicarSalvar(registro.Codigo);
-                    if (sucesso)
+                    if (await ClicarSalvar())
                     {
                         registro.Status = "Sucesso";
-                        registro.Mensagem = mensagem;
+                        registro.Mensagem = "Cadastrado com sucesso";
                     }
                     else
                     {
                         registro.Status = "Erro";
-                        registro.Mensagem = mensagem;
+                        registro.Mensagem = "Falha ao salvar";
                     }
                     
                     await ClicarSair();
                 }
                 else
                 {
-                    // Código não existe - inserir Item Não Orçado
+                    // Fluxo - código não existe, inserir Item Não Orçado
                     Log("⚠️ Código não encontrado, inserindo Item Não Orçado...");
                     
                     if (!await InserirItemNaoOrcado(registro.Codigo))
@@ -469,15 +417,11 @@ namespace CadastroProducaoCRE.Services
                     }
                     
                     await ClicarSair();
+                    await Task.Delay(500);
                     
-                    // Aguarda e tenta novamente
-                    await Task.Delay(2000);
-                    
-                    // Verifica se o código foi inserido
+                    // Verificar se o código foi inserido
                     if (await VerificarCodigoExiste(registro.Codigo))
                     {
-                        Log("✅ Código inserido com sucesso, continuando cadastro...");
-                        
                         if (!await ClicarNovo(registro.Codigo))
                         {
                             registro.Status = "Erro";
@@ -489,16 +433,15 @@ namespace CadastroProducaoCRE.Services
                         await SelecionarEquipe(registro.Equipe);
                         await SelecionarNatureza(registro.Natureza);
                         
-                        var (sucesso, mensagem) = await ClicarSalvar(registro.Codigo);
-                        if (sucesso)
+                        if (await ClicarSalvar())
                         {
                             registro.Status = "Sucesso";
-                            registro.Mensagem = mensagem;
+                            registro.Mensagem = "Item Não Orçado cadastrado com sucesso";
                         }
                         else
                         {
                             registro.Status = "Erro";
-                            registro.Mensagem = mensagem;
+                            registro.Mensagem = "Falha ao salvar após inserir item";
                         }
                         
                         await ClicarSair();
@@ -510,12 +453,11 @@ namespace CadastroProducaoCRE.Services
                     }
                 }
                 
-                // Limpar formulário para próximo registro
                 await LimparFormulario();
                 
                 var fim = DateTime.Now;
                 registro.DataProcessamento = fim;
-                Log($"⏱️ Tempo de processamento: {(fim - inicio).TotalSeconds:F1} segundos");
+                Log($"⏱️ Tempo: {(fim - inicio).TotalSeconds:F1}s - Status: {registro.Status}");
                 
                 return registro;
             }
@@ -523,8 +465,7 @@ namespace CadastroProducaoCRE.Services
             {
                 registro.Status = "Erro";
                 registro.Mensagem = ex.Message;
-                registro.DataProcessamento = DateTime.Now;
-                Log($"❌ Erro ao processar registro: {ex.Message}");
+                Log($"❌ Erro: {ex.Message}");
                 return registro;
             }
         }

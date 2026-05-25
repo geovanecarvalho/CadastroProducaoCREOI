@@ -2,10 +2,11 @@ using ClosedXML.Excel;
 using CadastroProducaoCRE.Models;
 using System;
 using System.Collections.Generic;
-using System.Data;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace CadastroProducaoCRE.Services
 {
@@ -28,6 +29,8 @@ namespace CadastroProducaoCRE.Services
             return await Task.Run(() =>
             {
                 var registros = new List<RegistroProducao>();
+                var errosConversao = new List<string>();
+                var linhaNumero = 2; // Primeira linha de dados
                 
                 try
                 {
@@ -36,10 +39,34 @@ namespace CadastroProducaoCRE.Services
                     using (var workbook = new XLWorkbook(caminhoArquivo))
                     {
                         var worksheet = workbook.Worksheet(1);
-                        var rows = worksheet.RowsUsed().Skip(1); // Pular cabeçalho
+                        var rows = worksheet.RowsUsed().Skip(1);
                         
                         foreach (var row in rows)
                         {
+                            var quantidadeTexto = row.Cell(9).GetString();
+                            decimal quantidade = 0;
+                            var quantidadeOriginal = quantidadeTexto;
+                            
+                            // Verifica se contém vírgula (formato brasileiro inválido)
+                            if (quantidadeTexto.Contains(","))
+                            {
+                                errosConversao.Add($"Linha {linhaNumero}: '{quantidadeOriginal}' - Use ponto (.) em vez de vírgula (,)");
+                            }
+                            
+                            // Tenta converter (substituindo vírgula por ponto)
+                            quantidadeTexto = quantidadeTexto.Replace(",", ".");
+                            
+                            if (!decimal.TryParse(quantidadeTexto, 
+                                NumberStyles.Any, 
+                                CultureInfo.InvariantCulture, 
+                                out quantidade))
+                            {
+                                if (!quantidadeOriginal.Contains(","))
+                                {
+                                    errosConversao.Add($"Linha {linhaNumero}: '{quantidadeOriginal}' não é um número válido");
+                                }
+                            }
+                            
                             var registro = new RegistroProducao
                             {
                                 Centro = row.Cell(1).GetString(),
@@ -50,12 +77,35 @@ namespace CadastroProducaoCRE.Services
                                 Contrato = row.Cell(6).GetString(),
                                 Natureza = row.Cell(7).GetString(),
                                 Codigo = row.Cell(8).GetString(),
-                                Quantidade = decimal.TryParse(row.Cell(9).GetString(), out var qtd) ? qtd : 0,
+                                Quantidade = quantidade,
                                 Equipe = row.Cell(10).GetString()
                             };
                             
                             registros.Add(registro);
+                            linhaNumero++;
                         }
+                    }
+                    
+                    // Se houver erros de conversão, interrompe o processo
+                    if (errosConversao.Count > 0)
+                    {
+                        var mensagemErro = "❌ ERRO DE FORMATAÇÃO NA PLANILHA!\n\n" +
+                                           "O sistema detectou problemas no formato dos números decimais.\n\n" +
+                                           "PROBLEMAS ENCONTRADOS:\n" +
+                                           string.Join("\n", errosConversao) + "\n\n" +
+                                           "✅ SOLUÇÃO:\n" +
+                                           "1. Abra a planilha no Excel\n" +
+                                           "2. Substitua a vírgula (,) por ponto (.) na coluna QUANTIDADE\n" +
+                                           "3. Exemplo: 412,50 → 412.50\n" +
+                                           "4. Salve a planilha\n" +
+                                           "5. Carregue o arquivo novamente\n\n" +
+                                           "O processo será interrompido até que a planilha seja corrigida.";
+                        
+                        MessageBox.Show(mensagemErro, "Erro de Formatação", 
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        
+                        // Retorna lista vazia para interromper o processo
+                        return new List<RegistroProducao>();
                     }
                     
                     Log($"✅ {registros.Count} registros carregados");
@@ -64,7 +114,9 @@ namespace CadastroProducaoCRE.Services
                 catch (Exception ex)
                 {
                     Log($"❌ Erro ao ler planilha: {ex.Message}");
-                    return registros;
+                    MessageBox.Show($"Erro ao ler a planilha:\n\n{ex.Message}", 
+                        "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return new List<RegistroProducao>();
                 }
             });
         }
