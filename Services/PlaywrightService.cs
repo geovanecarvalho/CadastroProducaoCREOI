@@ -12,6 +12,7 @@ namespace CadastroProducaoCRE.Services
     public class PlaywrightService
     {
         private IPlaywright? _playwright;
+        public IPage? GetPage() => _page;
         private IBrowser? _browser;
         private IBrowserContext? _context;
         private IPage? _page;

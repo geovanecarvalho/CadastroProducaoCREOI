@@ -13,6 +13,8 @@ namespace CadastroProducaoCRE.Views
         private ConfigManager _configManager;
         private ToolTip _toolTip;
         private PlaywrightService? _playwright;
+
+        private bool _isRunning = false;
         
         public MainForm()
         {
@@ -349,6 +351,14 @@ namespace CadastroProducaoCRE.Views
                 return;
             }
             
+            // Verifica se tem arquivo selecionado
+            if (string.IsNullOrEmpty(_caminhoArquivo))
+            {
+                AdicionarLog("❌ Nenhum arquivo Excel selecionado!");
+                FinalizarExecucao(false);
+                return;
+            }
+            
             var urlLogin = "https://oilogin.oi.net.br/nidp/idff/sso?id=OiPasswordClassCorporativoId&sid=0&option=credential&sid=0&target=https%3A%2F%2Fcre.oi.net.br%2FCRE_NEW%2F";
             var urlIndex = "https://cre.oi.net.br/CRE_NEW/CadastroProducao/Index";
             var username = txtUsuario.Text;
@@ -394,10 +404,10 @@ namespace CadastroProducaoCRE.Views
                 this.Invoke(new Action(() =>
                 {
                     AdicionarLog($"🔐 Tentativa {tentativa} - Login falhou! Por favor, digite um novo OTP.");
-                    var otpDialog = new OTPDialog();
-                    if (otpDialog.ShowDialog() == DialogResult.OK)
+                    var otpDialogLocal = new OTPDialog();
+                    if (otpDialogLocal.ShowDialog() == DialogResult.OK)
                     {
-                        novoOtp = otpDialog.GetOTP();
+                        novoOtp = otpDialogLocal.GetOTP();
                         AdicionarLog($"🔐 Novo OTP recebido: {'*' * novoOtp.Length}");
                     }
                 }));
@@ -411,7 +421,14 @@ namespace CadastroProducaoCRE.Views
             {
                 AdicionarLog("🌐 Navegador logado e pronto!");
                 AdicionarLog("✅ Página de cadastro carregada!");
-                AdicionarLog("⏸️ Aguardando - Pressione Parar para encerrar");
+                
+                // ========== AQUI COMEÇA O PROCESSAMENTO DA PLANILHA ==========
+                _isRunning = true;
+                await ProcessarPlanilha(_caminhoArquivo);
+                _isRunning = false;
+                // ========== FIM DO PROCESSAMENTO ==========
+                
+                AdicionarLog("🏁 Processamento finalizado!");
             }
             else
             {
@@ -429,6 +446,10 @@ namespace CadastroProducaoCRE.Views
             
             AdicionarLog("⚠️ Solicitando parada da automação...");
             
+            // Interromper processamento
+            _isRunning = false;
+            
+            // Fechar navegador
             if (_playwright != null)
             {
                 AdicionarLog("🔒 Fechando navegador...");
@@ -693,5 +714,135 @@ namespace CadastroProducaoCRE.Views
             base.OnFormClosing(e);
             SalvarConfiguracoes();
         }
+
+
+    private async Task ProcessarPlanilha(string caminhoArquivo)
+    {
+        try
+        {
+            var excelService = new ExcelService(AdicionarLog);
+            var scraperService = new ScraperService(_playwright.GetPage(), AdicionarLog);
+            
+            AdicionarLog("📊 Iniciando leitura da planilha...");
+            var registros = await excelService.LerPlanilha(caminhoArquivo);
+            
+            if (registros.Count == 0)
+            {
+                AdicionarLog("⚠️ Nenhum registro encontrado na planilha");
+                return;
+            }
+            
+            AdicionarLog($"📋 {registros.Count} registros carregados para processamento");
+            
+            var total = registros.Count;
+            var processados = 0;
+            
+            // Garantir que está na página de cadastro
+            if (!await scraperService.AcessarPaginaCadastro())
+            {
+                AdicionarLog("❌ Não foi possível acessar a página de cadastro");
+                return;
+            }
+            
+            foreach (var registro in registros)
+            {
+                if (!_isRunning)
+                {
+                    AdicionarLog("⏹️ Processamento interrompido pelo usuário");
+                    break;
+                }
+                
+                var resultado = await scraperService.ProcessarRegistro(registro);
+                processados++;
+                
+                AtualizarProgresso(processados, total);
+            }
+            
+            AdicionarLog("");
+            AdicionarLog("=".PadRight(50, '='));
+            AdicionarLog("📊 RESUMO DO PROCESSAMENTO");
+            AdicionarLog("=".PadRight(50, '='));
+            
+            var sucessos = registros.Count(r => r.Status == "Sucesso");
+            var erros = registros.Count(r => r.Status == "Erro");
+            
+            AdicionarLog($"✅ Processados: {processados}/{total}");
+            AdicionarLog($"✅ Sucessos: {sucessos}");
+            AdicionarLog($"❌ Erros: {erros}");
+            
+            // Gerar relatório
+            AdicionarLog("");
+            AdicionarLog("💾 Gerando relatório...");
+            var caminhoRelatorio = await excelService.GerarRelatorio(registros);
+            
+            // ========== FECHAR O NAVEGADOR ==========
+            AdicionarLog("🔒 Fechando navegador...");
+            if (_playwright != null)
+            {
+                await _playwright.FecharNavegador();
+                AdicionarLog("✅ Navegador fechado com sucesso!");
+            }
+            
+            // ========== MENSAGEM PARA LOCALIZAR O ARQUIVO ==========
+            if (!string.IsNullOrEmpty(caminhoRelatorio) && File.Exists(caminhoRelatorio))
+            {
+                // Mostra mensagem de sucesso com opção de abrir a pasta
+                var result = MessageBox.Show(
+                    $"✅ PROCESSAMENTO FINALIZADO!\n\n" +
+                    $"📊 Resumo:\n" +
+                    $"   - Total de registros: {total}\n" +
+                    $"   - Sucessos: {sucessos}\n" +
+                    $"   - Erros: {erros}\n\n" +
+                    $"📁 Relatório salvo em:\n{caminhoRelatorio}\n\n" +
+                    $"Deseja abrir a pasta onde o arquivo está localizado?",
+                    "Processamento Concluído",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information);
+                
+                if (result == DialogResult.Yes)
+                {
+                    // Abre a pasta e seleciona o arquivo
+                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{caminhoRelatorio}\"");
+                }
+                
+                AdicionarLog($"📁 Relatório: {caminhoRelatorio}");
+            }
+            else
+            {
+                MessageBox.Show(
+                    $"✅ PROCESSAMENTO FINALIZADO!\n\n" +
+                    $"📊 Resumo:\n" +
+                    $"   - Total de registros: {total}\n" +
+                    $"   - Sucessos: {sucessos}\n" +
+                    $"   - Erros: {erros}\n\n" +
+                    $"⚠️ Não foi possível gerar o relatório.",
+                    "Processamento Concluído",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+            
+            // Finalizar execução (reativar botões)
+            FinalizarExecucao(true);
+        }
+        catch (Exception ex)
+        {
+            AdicionarLog($"❌ Erro ao processar planilha: {ex.Message}");
+            
+            // Tentar fechar navegador mesmo em caso de erro
+            if (_playwright != null)
+            {
+                await _playwright.FecharNavegador();
+            }
+            
+            MessageBox.Show(
+                $"❌ Erro durante o processamento!\n\n{ex.Message}",
+                "Erro",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            
+            FinalizarExecucao(false);
+        }
+    }    
+
     }
 }
