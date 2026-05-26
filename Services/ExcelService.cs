@@ -30,7 +30,7 @@ namespace CadastroProducaoCRE.Services
             {
                 var registros = new List<RegistroProducao>();
                 var errosConversao = new List<string>();
-                var linhaNumero = 2; // Primeira linha de dados
+                var linhaNumero = 2;
                 
                 try
                 {
@@ -44,28 +44,9 @@ namespace CadastroProducaoCRE.Services
                         foreach (var row in rows)
                         {
                             var quantidadeTexto = row.Cell(9).GetString();
-                            decimal quantidade = 0;
-                            var quantidadeOriginal = quantidadeTexto;
+                            var quantidade = ConverterQuantidadeBrasil(quantidadeTexto);
                             
-                            // Verifica se contém vírgula (formato brasileiro inválido)
-                            if (quantidadeTexto.Contains(","))
-                            {
-                                errosConversao.Add($"Linha {linhaNumero}: '{quantidadeOriginal}' - Use ponto (.) em vez de vírgula (,)");
-                            }
-                            
-                            // Tenta converter (substituindo vírgula por ponto)
-                            quantidadeTexto = quantidadeTexto.Replace(",", ".");
-                            
-                            if (!decimal.TryParse(quantidadeTexto, 
-                                NumberStyles.Any, 
-                                CultureInfo.InvariantCulture, 
-                                out quantidade))
-                            {
-                                if (!quantidadeOriginal.Contains(","))
-                                {
-                                    errosConversao.Add($"Linha {linhaNumero}: '{quantidadeOriginal}' não é um número válido");
-                                }
-                            }
+                            Log($"📊 Linha {linhaNumero}: '{quantidadeTexto}' -> {quantidade}");
                             
                             var registro = new RegistroProducao
                             {
@@ -86,37 +67,13 @@ namespace CadastroProducaoCRE.Services
                         }
                     }
                     
-                    // Se houver erros de conversão, interrompe o processo
-                    if (errosConversao.Count > 0)
-                    {
-                        var mensagemErro = "❌ ERRO DE FORMATAÇÃO NA PLANILHA!\n\n" +
-                                           "O sistema detectou problemas no formato dos números decimais.\n\n" +
-                                           "PROBLEMAS ENCONTRADOS:\n" +
-                                           string.Join("\n", errosConversao) + "\n\n" +
-                                           "✅ SOLUÇÃO:\n" +
-                                           "1. Abra a planilha no Excel\n" +
-                                           "2. Substitua a vírgula (,) por ponto (.) na coluna QUANTIDADE\n" +
-                                           "3. Exemplo: 412,50 → 412.50\n" +
-                                           "4. Salve a planilha\n" +
-                                           "5. Carregue o arquivo novamente\n\n" +
-                                           "O processo será interrompido até que a planilha seja corrigida.";
-                        
-                        MessageBox.Show(mensagemErro, "Erro de Formatação", 
-                            MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        
-                        // Retorna lista vazia para interromper o processo
-                        return new List<RegistroProducao>();
-                    }
-                    
                     Log($"✅ {registros.Count} registros carregados");
                     return registros;
                 }
                 catch (Exception ex)
                 {
                     Log($"❌ Erro ao ler planilha: {ex.Message}");
-                    MessageBox.Show($"Erro ao ler a planilha:\n\n{ex.Message}", 
-                        "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return new List<RegistroProducao>();
+                    return registros;
                 }
             });
         }
@@ -184,6 +141,86 @@ namespace CadastroProducaoCRE.Services
                     return "";
                 }
             });
+        }
+
+        private decimal ConverterQuantidadeBrasil(string valor)
+        {
+            if (string.IsNullOrEmpty(valor))
+                return 0;
+            
+            // Remove espaços
+            valor = valor.Trim();
+            
+            Log($"📊 Convertendo: '{valor}'");
+            
+            // Caso 1: Se tiver vírgula (formato brasileiro)
+            if (valor.Contains(","))
+            {
+                // Divide a parte inteira da decimal
+                var partes = valor.Split(',');
+                
+                string parteInteira = partes[0].Trim();
+                string parteDecimal = partes.Length > 1 ? partes[1].Trim() : "00";
+                
+                // Remove pontos de milhar da parte inteira (se existir)
+                parteInteira = parteInteira.Replace(".", "");
+                
+                // Garante que a parte decimal tenha 2 dígitos
+                if (parteDecimal.Length == 1)
+                {
+                    parteDecimal = parteDecimal + "0";  // 5 -> 50
+                }
+                else if (parteDecimal.Length > 2)
+                {
+                    parteDecimal = parteDecimal.Substring(0, 2);  // 50 -> 50
+                }
+                
+                // Concatena com ponto
+                var convertido = parteInteira + "." + parteDecimal;
+                
+                Log($"📊 Convertido: '{convertido}'");
+                
+                if (decimal.TryParse(convertido, 
+                    System.Globalization.NumberStyles.Any, 
+                    System.Globalization.CultureInfo.InvariantCulture, 
+                    out decimal result))
+                {
+                    Log($"📊 Resultado: {result}");
+                    return result;
+                }
+            }
+            else
+            {
+                // Caso 2: Não tem vírgula (número inteiro)
+                // Remove pontos de milhar se existir
+                var limpo = valor.Replace(".", "");
+                
+                // Adiciona .00 para ter duas casas decimais
+                var convertido = limpo + ".00";
+                
+                Log($"📊 Convertido (inteiro): '{convertido}'");
+                
+                if (decimal.TryParse(convertido, 
+                    System.Globalization.NumberStyles.Any, 
+                    System.Globalization.CultureInfo.InvariantCulture, 
+                    out decimal result))
+                {
+                    Log($"📊 Resultado: {result}");
+                    return result;
+                }
+            }
+            
+            // Caso 3: Tentativa padrão
+            if (decimal.TryParse(valor, 
+                System.Globalization.NumberStyles.Any, 
+                System.Globalization.CultureInfo.InvariantCulture, 
+                out decimal final))
+            {
+                return final;
+            }
+            
+            Log($"⚠️ Não foi possível converter: '{valor}'");
+            return 0;
         }
     }
 }

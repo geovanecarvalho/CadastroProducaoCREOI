@@ -725,13 +725,13 @@ namespace CadastroProducaoCRE.Views
                 var registros = await excelService.LerPlanilha(caminhoArquivo);
                 
                 // ========== VALIDAÇÃO: SE NÃO HÁ REGISTROS, INTERROMPE ==========
-                if (registros == null || registros.Count == 0)
-                {
-                    AdicionarLog("❌ Processamento cancelado devido a erros na planilha");
-                    AdicionarLog("⚠️ Verifique o formato dos números decimais (use ponto . no lugar da vírgula ,)");
-                    FinalizarExecucao(false);
-                    return;
-                }
+                // if (registros == null || registros.Count == 0)
+                // {
+                //     AdicionarLog("❌ Processamento cancelado devido a erros na planilha");
+                //     AdicionarLog("⚠️ Verifique o formato dos números decimais (use ponto . no lugar da vírgula ,)");
+                //     FinalizarExecucao(false);
+                //     return;
+                // }
                 
                 AdicionarLog($"📋 {registros.Count} registros carregados para processamento");
                 
