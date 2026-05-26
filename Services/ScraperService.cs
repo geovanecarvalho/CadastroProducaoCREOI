@@ -469,5 +469,56 @@ namespace CadastroProducaoCRE.Services
                 return registro;
             }
         }
+
+        public async Task<bool> ClicarBotaoLogin()
+        {
+            try
+            {
+                Log("🔍 Procurando botão de login...");
+                
+                var loginSelectors = new[]
+                {
+                    "button:has-text('efetuar login')",
+                    "button:has-text('Efetuar Login')",
+                    "button:has-text('Entrar')",
+                    "button:has-text('Login')",
+                    "button[type='submit']",
+                    "input[type='submit']",
+                    ".btn-oi-new",
+                    "button.btn-block",
+                    "#btnLogin"
+                };
+                
+                foreach (var selector in loginSelectors)
+                {
+                    try
+                    {
+                        var button = await _page.QuerySelectorAsync(selector);
+                        if (button != null && await button.IsVisibleAsync())
+                        {
+                            Log($"✅ Botão encontrado: {selector}");
+                            await button.ClickAsync();
+                            Log("🖱️ Botão clicado automaticamente!");
+                            await Task.Delay(3000);
+                            return true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"⚠️ Erro com seletor {selector}: {ex.Message}");
+                    }
+                }
+                
+                Log("⚠️ Botão não encontrado, tentando Enter...");
+                await _page.Keyboard.PressAsync("Enter");
+                await Task.Delay(3000);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Erro ao clicar no botão: {ex.Message}");
+                return false;
+            }
+        }
     }
 }

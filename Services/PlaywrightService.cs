@@ -142,8 +142,8 @@ namespace CadastroProducaoCRE.Services
                 _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
                 {
                     Headless = _headless,
-                    Args = args,
-                    SlowMo = 0  // Desabilitar SlowMo
+                    Channel = "chrome",  // Usa o Chrome instalado no sistema
+                    Args = args
                 });
                 
                 // Criar contexto com configurações realistas
@@ -363,7 +363,7 @@ namespace CadastroProducaoCRE.Services
                 
                 await Task.Delay(500);
                 
-                // === 4. CLICAR NO BOTÃO DE LOGIN ===
+                // === 4. CLICAR NO BOTÃO DE LOGIN (DUAS VEZES) ===
                 Log("🔍 Procurando botão 'efetuar login'...");
                 
                 var loginSelectors = new[]
@@ -386,8 +386,19 @@ namespace CadastroProducaoCRE.Services
                         if (loginButton != null && await loginButton.IsVisibleAsync())
                         {
                             Log($"✅ Botão de login encontrado: {selector}");
+                            
+                            // PRIMEIRO CLIQUE
                             await loginButton.ClickAsync();
-                            Log("🖱️ Botão 'efetuar login' clicado!");
+                            Log("🖱️ Primeiro clique no botão de login!");
+                            await Task.Delay(1000);
+                            
+                            // SEGUNDO CLIQUE (se necessário)
+                            if (await loginButton.IsVisibleAsync())
+                            {
+                                await loginButton.ClickAsync();
+                                Log("🖱️ Segundo clique no botão de login!");
+                            }
+                            
                             clicou = true;
                             break;
                         }
@@ -403,6 +414,9 @@ namespace CadastroProducaoCRE.Services
                     Log("⚠️ Botão de login não encontrado, tentando submeter com Enter...");
                     await _page.Keyboard.PressAsync("Enter");
                     Log("⏎ Tecla Enter pressionada");
+                    await Task.Delay(1000);
+                    await _page.Keyboard.PressAsync("Enter");
+                    Log("⏎ Segunda tecla Enter pressionada");
                 }
                 
                 Log("");
@@ -426,67 +440,67 @@ namespace CadastroProducaoCRE.Services
             }
         }
         
-        public async Task<bool> AguardarLoginManual(int timeoutSegundos = 120)
-        {
-            Log($"⏳ Aguardando login manual (máximo {timeoutSegundos}s)...");
-            Log("🔍 Procurando elemento do usuário logado...");
+        // public async Task<bool> AguardarLoginManual(int timeoutSegundos = 120)
+        // {
+        //     Log($"⏳ Aguardando login manual (máximo {timeoutSegundos}s)...");
+        //     Log("🔍 Procurando elemento do usuário logado...");
             
-            var timeoutInicial = DateTime.Now;
-            var ultimoLog = DateTime.Now;
+        //     var timeoutInicial = DateTime.Now;
+        //     var ultimoLog = DateTime.Now;
             
-            while ((DateTime.Now - timeoutInicial).TotalSeconds < timeoutSegundos)
-            {
-                try
-                {
-                    if (_page == null) continue;
+        //     while ((DateTime.Now - timeoutInicial).TotalSeconds < timeoutSegundos)
+        //     {
+        //         try
+        //         {
+        //             if (_page == null) continue;
                     
-                    // Procura pelo elemento do usuário logado
-                    var userLabel = await _page.QuerySelectorAsync("label:has-text(\"Usuário:\")");
-                    if (userLabel != null && await userLabel.IsVisibleAsync())
-                    {
-                        var userText = await userLabel.TextContentAsync();
-                        if (!string.IsNullOrEmpty(userText) && userText.Contains("TR"))
-                        {
-                            // Atualiza mensagem visual para sucesso
-                            await _page.EvaluateAsync(@"
-                                () => {
-                                    const div = document.getElementById('automacao-status');
-                                    if (div) {
-                                        div.style.backgroundColor = '#2196F3';
-                                        div.style.border = '2px solid #1976D2';
-                                        div.innerHTML = '✅ LOGIN DETECTADO COM SUCESSO!<br><br>' +
-                                                    '🔓 Redirecionando para o sistema...<br><br>' +
-                                                    '🔄 Aguarde...';
-                                    }
-                                }
-                            ");
+        //             // Procura pelo elemento do usuário logado
+        //             var userLabel = await _page.QuerySelectorAsync("label:has-text(\"Usuário:\")");
+        //             if (userLabel != null && await userLabel.IsVisibleAsync())
+        //             {
+        //                 var userText = await userLabel.TextContentAsync();
+        //                 if (!string.IsNullOrEmpty(userText) && userText.Contains("TR"))
+        //                 {
+        //                     // Atualiza mensagem visual para sucesso
+        //                     await _page.EvaluateAsync(@"
+        //                         () => {
+        //                             const div = document.getElementById('automacao-status');
+        //                             if (div) {
+        //                                 div.style.backgroundColor = '#2196F3';
+        //                                 div.style.border = '2px solid #1976D2';
+        //                                 div.innerHTML = '✅ LOGIN DETECTADO COM SUCESSO!<br><br>' +
+        //                                             '🔓 Redirecionando para o sistema...<br><br>' +
+        //                                             '🔄 Aguarde...';
+        //                             }
+        //                         }
+        //                     ");
                             
-                            Log($"✅ LOGIN DETECTADO COM SUCESSO!");
-                            Log($"👤 {userText.Trim()}");
-                            _loginRealizado = true;
-                            return true;
-                        }
-                    }
+        //                     Log($"✅ LOGIN DETECTADO COM SUCESSO!");
+        //                     Log($"👤 {userText.Trim()}");
+        //                     _loginRealizado = true;
+        //                     return true;
+        //                 }
+        //             }
                     
-                    // Log a cada 30 segundos
-                    if ((DateTime.Now - ultimoLog).TotalSeconds >= 30)
-                    {
-                        ultimoLog = DateTime.Now;
-                        var tempoDecorrido = (DateTime.Now - timeoutInicial).TotalSeconds;
-                        Log($"⏳ Aguardando login... ({tempoDecorrido:F0}s / {timeoutSegundos}s)");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Ignora erros temporários
-                }
+        //             // Log a cada 30 segundos
+        //             if ((DateTime.Now - ultimoLog).TotalSeconds >= 30)
+        //             {
+        //                 ultimoLog = DateTime.Now;
+        //                 var tempoDecorrido = (DateTime.Now - timeoutInicial).TotalSeconds;
+        //                 Log($"⏳ Aguardando login... ({tempoDecorrido:F0}s / {timeoutSegundos}s)");
+        //             }
+        //         }
+        //         catch (Exception ex)
+        //         {
+        //             // Ignora erros temporários
+        //         }
                 
-                await Task.Delay(1000);
-            }
+        //         await Task.Delay(1000);
+        //     }
             
-            Log($"❌ Timeout de {timeoutSegundos} segundos atingido. Login não detectado.");
-            return false;
-        }
+        //     Log($"❌ Timeout de {timeoutSegundos} segundos atingido. Login não detectado.");
+        //     return false;
+        // }
         
         public async Task<bool> RealizarLoginCompleto(string username, string password, string otp, string urlLogin, string urlIndex)
         {
@@ -539,20 +553,20 @@ namespace CadastroProducaoCRE.Services
                 await Task.Delay(3000);
                 
                 // Verifica se o login foi bem sucedido
-                if (await AguardarLoginManual(30))
-                {
-                    Log("✅ Login detectado!");
+                // if (await AguardarLoginManual(30))
+                // {
+                //     Log("✅ Login detectado!");
                     
-                    // Salva a sessão
-                    await SalvarSessao();
+                //     // Salva a sessão
+                //     await SalvarSessao();
                     
-                    // Navega para a página de cadastro
-                    Log($"🌍 Navegando para página de cadastro: {urlIndex}");
-                    await _page.GotoAsync(urlIndex, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-                    await Task.Delay(3000);
+                //     // Navega para a página de cadastro
+                //     Log($"🌍 Navegando para página de cadastro: {urlIndex}");
+                //     await _page.GotoAsync(urlIndex, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+                //     await Task.Delay(3000);
                     
-                    return true;
-                }
+                //     return true;
+                // }
             }
             
             Log($"❌ Número máximo de tentativas ({maxTentativas}) atingido!");
