@@ -32,8 +32,56 @@ namespace CadastroProducaoCRE.Views
             _toolTip.SetToolTip(btnIniciar, "⚠️ Aguardando dados para iniciar...");
             
             VerificarProntoParaIniciar();
+
+            // Verificar atualizações (em segundo plano)
+            Task.Run(() => VerificarAtualizacaoAsync());
         }
         
+        private async Task VerificarAtualizacaoAsync()
+        {
+            try
+            {
+                // Verificar se a versão foi ignorada
+                var ignoreFile = Path.Combine(Application.StartupPath, "ignored_version.txt");
+                var updateService = new UpdateService(AdicionarLog);
+                
+                // Se a versão atual foi ignorada, não notificar
+                if (File.Exists(ignoreFile))
+                {
+                    var ignoredVersion = File.ReadAllText(ignoreFile);
+                    if (ignoredVersion == updateService.CurrentVersion)
+                    {
+                        AdicionarLog("ℹ️ Atualização ignorada pelo usuário");
+                        return;
+                    }
+                }
+                
+                updateService.OnUpdateAvailable += (updateInfo) =>
+                {
+                    if (this.InvokeRequired)
+                    {
+                        this.Invoke(() => MostrarDialogAtualizacao(updateInfo, updateService));
+                    }
+                    else
+                    {
+                        MostrarDialogAtualizacao(updateInfo, updateService);
+                    }
+                };
+                
+                await updateService.VerificarAtualizacaoAsync();
+            }
+            catch (Exception ex)
+            {
+                AdicionarLog($"⚠️ Erro ao verificar atualizações: {ex.Message}");
+            }
+        }
+
+        private void MostrarDialogAtualizacao(UpdateInfo updateInfo, UpdateService updateService)
+        {
+            var dialog = new UpdateNotificationForm(updateInfo, updateService);
+            dialog.ShowDialog();
+        }
+
         public void AdicionarLog(string mensagem)
         {
             if (txtLog.InvokeRequired)
